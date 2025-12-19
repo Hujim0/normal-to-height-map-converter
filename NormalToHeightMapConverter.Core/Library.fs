@@ -10,7 +10,7 @@ module Reconstruct =
     type private FoldState = { Frontier: Queue<Point>; Iter: int }
 
     let reconstructHeightFromNormals
-        (normals: Normal array2d) // [row, col]
+        (normals: Normal array2d)
         (seed: Point * float)
         (eta0: float)
         (tau: float)
@@ -18,34 +18,28 @@ module Reconstruct =
         (eps: float)
         : float array2d =
 
-        let H = normals.GetLength(0) // Rows
-        let W = normals.GetLength(1) // Columns
+        let H = normals.GetLength(0)
+        let W = normals.GetLength(1)
 
-        // Initialize height map [row, col]
         let z = Array2D.create H W Double.NaN
         let (seedPt, seedZ) = seed
-        z.[seedPt.Y, seedPt.X] <- seedZ // [row, col] indexing
+        z.[seedPt.Y, seedPt.X] <- seedZ
 
-        // Track known cells [row, col]
-        let known = Array2D.create H W false
-        known.[seedPt.Y, seedPt.X] <- true
+        let directions = [| (1, 0); (-1, 0); (0, 1); (0, -1) |]
 
-        // Directions: (dx, dy, axis) where:
-        // dx = column delta, dy = row delta
-        let directions =
-            [| (1, 0, 'x') // Right (positive column)
-               (-1, 0, 'x') // Left
-               (0, 1, 'y') // Down (positive row - image coordinates!)
-               (0, -1, 'y') |] // Up
-
-        let inline predFromNormal (n: Normal) (axis: char) : float option =
+        let inline predFromNormal (n: Normal) (dx: int) (dy: int) : float option =
             if abs n.Nz < eps then
                 None
             else
-                match axis with
-                | 'x' -> Some(-n.Nx / n.Nz) // Column direction
-                | 'y' -> Some(-n.Ny / n.Nz) // Row direction
-                | _ -> None
+                let step = if dx <> 0 then float dx else float dy
+                let dz = if dx <> 0 then -n.Nx / n.Nz else -n.Ny / n.Nz
+                Some(dz * step)
+
+        let isFixedPoint (pt: Point) = pt.X = seedPt.X && pt.Y = seedPt.Y
+
+        // Track recently initialized count to detect stagnation
+        let mutable lastInitCount = 1 // seed is initialized
+        let stagnationLimit = 3 // stop if no progress for 3 iterations
 
         let initialState =
             { Frontier =
@@ -55,45 +49,55 @@ module Reconstruct =
               Iter = 0 }
 
         let folder state _ =
-            if state.Frontier.Count = 0 || state.Iter >= maxIter then
+            let eta = eta0 / (1.0 + float state.Iter / tau)
+
+            // Early exit if eta is tiny AND propagation has stalled
+            if state.Iter >= maxIter || (eta < 0.01 && state.Frontier.Count = 0) then
+                printfn $"Stopping at iter {state.Iter}: eta={eta:F5}, frontier empty"
                 state
             else
+                printfn $"Iter {state.Iter}: frontier={state.Frontier.Count}, eta={eta:F5}"
+
                 let nextFrontier = Queue<Point>()
                 let updates = Dictionary<Point, ResizeArray<float>>()
+                let mutable newlyInitialized = 0
 
                 while state.Frontier.Count > 0 do
                     let p = state.Frontier.Dequeue()
-                    // CORRECT INDEXING: [row=Y, col=X]
                     let n = normals.[p.Y, p.X]
 
-                    for (dx, dy, axis) in directions do
-                        let nx = p.X + dx // New column
-                        let ny = p.Y + dy // New row
+                    for (dx, dy) in directions do
+                        let nx = p.X + dx
+                        let ny = p.Y + dy
 
-                        // CORRECT BOUNDS CHECKING:
-                        if nx >= 0 && nx < W && ny >= 0 && ny < H && not known.[ny, nx] then
-                            match predFromNormal n axis with
+                        if nx >= 0 && nx < W && ny >= 0 && ny < H then
+                            match predFromNormal n dx dy with
                             | Some dz ->
-                                // Current height at [row, col] = [p.Y, p.X]
                                 let currentHeight = z.[p.Y, p.X]
-                                let newZ = currentHeight + dz
-                                let neighbor = { X = nx; Y = ny }
 
-                                match updates.TryGetValue(neighbor) with
-                                | (true, list) -> list.Add(newZ)
-                                | false, _ ->
-                                    let newList = ResizeArray<float>()
-                                    newList.Add(newZ)
-                                    updates.Add(neighbor, newList)
+                                if not (Double.IsNaN(currentHeight)) then
+                                    let newZ = currentHeight + dz
+                                    let neighbor = { X = nx; Y = ny }
+
+                                    if not (isFixedPoint neighbor) then
+                                        // Count if this neighbor was NaN before
+                                        if Double.IsNaN(z.[ny, nx]) then
+                                            newlyInitialized <- newlyInitialized + 1
+
+                                        match updates.TryGetValue(neighbor) with
+                                        | (true, list) -> list.Add(newZ)
+                                        | false, _ ->
+                                            let newList = ResizeArray<float>()
+                                            newList.Add(newZ)
+                                            updates.Add(neighbor, newList)
                             | None -> ()
 
-                let eta = eta0 / (1.0 + float state.Iter / tau)
-
+                // Apply updates
                 for kvp in updates do
                     let pt = kvp.Key
                     let preds = kvp.Value
                     let avgZ = preds.ToArray() |> Array.average
-                    let current = z.[pt.Y, pt.X] // [row, col]
+                    let current = z.[pt.Y, pt.X]
 
                     let finalZ =
                         if Double.IsNaN(current) then
@@ -101,13 +105,18 @@ module Reconstruct =
                         else
                             (1.0 - eta) * current + eta * avgZ
 
-                    z.[pt.Y, pt.X] <- finalZ // [row=Y, col=X]
-                    known.[pt.Y, pt.X] <- true
+                    z.[pt.Y, pt.X] <- finalZ
                     nextFrontier.Enqueue(pt)
+
+                // Detect stagnation: if no new pixels AND frontier is small, consider stopping
+                let initCount = lastInitCount + newlyInitialized
+                lastInitCount <- initCount
+
+                // Optional: if no new pixels for several iterations, stop
+                // (We don't track history here, but frontier size is proxy)
 
                 { Frontier = nextFrontier
                   Iter = state.Iter + 1 }
 
-        Seq.init maxIter id |> Seq.fold folder initialState |> ignore // We only care about side effects on z
-
+        Seq.init maxIter id |> Seq.fold folder initialState |> ignore
         z

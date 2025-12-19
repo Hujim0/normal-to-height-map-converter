@@ -14,7 +14,7 @@ module ImageProcessing =
             let height = image.Height
             let normals = Array2D.zeroCreate<Normal> height width
 
-            let epsilon = 0.01
+            let epsilon = 1.0
             let minValidMagnitude = 1e-5
 
             for y in 0 .. height - 1 do
