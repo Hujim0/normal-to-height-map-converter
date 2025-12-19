@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NormalToHeightMapConverter.CLI", "NormalToHeightMapConverter.CLI\NormalToHeightMapConverter.CLI.fsproj", "{706C6DA8-3F64-4513-877F-3DED83859087}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NormalToHeightMapConverter.Core", "NormalToHeightMapConverter.Core\NormalToHeightMapConverter.Core.fsproj", "{D7191AC0-0D8E-4476-B32A-1F85F96AF0BF}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NormalToHeightMapConverter.Test", "NormalToHeightMapConverter.Test\NormalToHeightMapConverter.Test.fsproj", "{004E13F2-99C2-43E8-A0DA-72397F7291B6}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NormalToHeightMapConverter.Web", "NormalToHeightMapConverter.Web\NormalToHeightMapConverter.Web.fsproj", "{C167D6AA-A537-4635-9C72-5E2868FB3599}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{706C6DA8-3F64-4513-877F-3DED83859087}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{706C6DA8-3F64-4513-877F-3DED83859087}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{706C6DA8-3F64-4513-877F-3DED83859087}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{706C6DA8-3F64-4513-877F-3DED83859087}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7191AC0-0D8E-4476-B32A-1F85F96AF0BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7191AC0-0D8E-4476-B32A-1F85F96AF0BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7191AC0-0D8E-4476-B32A-1F85F96AF0BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7191AC0-0D8E-4476-B32A-1F85F96AF0BF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{004E13F2-99C2-43E8-A0DA-72397F7291B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{004E13F2-99C2-43E8-A0DA-72397F7291B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{004E13F2-99C2-43E8-A0DA-72397F7291B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{004E13F2-99C2-43E8-A0DA-72397F7291B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C167D6AA-A537-4635-9C72-5E2868FB3599}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C167D6AA-A537-4635-9C72-5E2868FB3599}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C167D6AA-A537-4635-9C72-5E2868FB3599}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C167D6AA-A537-4635-9C72-5E2868FB3599}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
