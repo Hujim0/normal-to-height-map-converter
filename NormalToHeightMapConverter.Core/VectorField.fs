@@ -1,7 +1,6 @@
 namespace NormalToHeightMapConverter
 
 module VectorField =
-    open NormalToHeightMapConverter.PointTypes
     open MathNet.Numerics
     open MathNet.Numerics.LinearAlgebra
     open System
