@@ -9,23 +9,27 @@ type Arguments =
     | [<AltCommandLine "-e">] Eta0 of value: float
     | [<AltCommandLine "-t">] Tau of value: float
     | [<AltCommandLine "--eps">] Epsilon of value: float
-    | [<AltCommandLine "-s">] Seeds of count: int // Added border seed count parameter
+    | [<AltCommandLine "-s">] Seeds of count: int
+    | [<AltCommandLine "-c">] Combine of method: string // New combination method parameter
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Input _ -> "Input normal map image path"
             | Output _ -> "Output height map image path"
-            | Iterations _ -> "Number of iterations (default: 100)"
+            | Iterations _ -> "Number of iterations (default: auto-calculated)"
             | Eta0 _ -> "Initial step size (default: 0.05)"
             | Tau _ -> "Learning rate decay factor (default: 100.0)"
             | Epsilon _ -> "Convergence threshold (default: 1e-5)"
-            | Seeds _ -> "Number of seed points on border for reconstruction (default: 8)"
+            | Seeds _ -> "Number of seed points on border for reconstruction (default: 4)"
+            | Combine _ -> "Height map combination method: 'average' (default) or 'min'"
 
 module Main =
     open NormalToHeightMapConverter.Integration
     open NormalToHeightMapConverter.ImageProcessing
     open NormalToHeightMapConverter.Visualization
+    open SixLabors.ImageSharp
+    open SixLabors.ImageSharp.PixelFormats
 
     [<EntryPoint>]
     let main argv =
@@ -40,10 +44,18 @@ module Main =
             let eta0 = results.TryGetResult(<@ Eta0 @>)
             let tau = results.TryGetResult(<@ Tau @>)
             let eps = results.TryGetResult(<@ Epsilon @>)
-            let seeds = results.TryGetResult(<@ Seeds @>) // Get seed count parameter
+            let seeds = results.TryGetResult(<@ Seeds @>)
+            let combineMethod = results.TryGetResult(<@ Combine @>) // Get combination method
 
             printfn $"Processing: {inputFile} -> {outputFile}"
-            printfn $"Iterations: {iterations}"
+
+            printfn
+                $"Iterations: {defaultArg
+                                   iterations
+                                   (calculateMinIterations
+                                       (Image.Load<Rgba32>(inputFile).Width)
+                                       (Image.Load<Rgba32>(inputFile).Height)
+                                       (defaultArg seeds 4))}"
 
             match eta0 with
             | Some v -> printfn $"Eta0: {v}"
@@ -59,14 +71,19 @@ module Main =
 
             match seeds with
             | Some v -> printfn $"Border seeds: {v}"
-            | None -> printfn "Border seeds: 8 (default)"
+            | None -> printfn "Border seeds: 4 (default)"
+
+            match combineMethod with
+            | Some v -> printfn $"Combination method: {v}"
+            | None -> printfn "Combination method: average (default)"
 
             printfn "Loading normal map..."
             let normalMap = loadNormalMap inputFile
 
             printfn "Estimating height map..."
-            // Pass seeds parameter to estimateHeightMap
-            let heightMap = estimateHeightMap normalMap eta0 tau iterations eps seeds
+            // Pass seeds and combination method parameters
+            let heightMap =
+                estimateHeightMap normalMap eta0 tau iterations eps seeds combineMethod
 
             printfn "Saving result..."
             saveHeightMapAsImage heightMap outputFile

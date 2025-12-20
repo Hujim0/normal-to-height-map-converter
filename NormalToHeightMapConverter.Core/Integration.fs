@@ -54,8 +54,14 @@ module Integration =
                       Ny = blended_ny / mag_blended
                       Nz = blended_nz / mag_blended })
 
-    let private combineHeightMaps (heightMaps: float[,][]) : float[,] =
-        let sampleCount = heightMaps.Length
+    /// Combine multiple height maps using specified method
+    let private combineHeightMaps (method: string) (heightMaps: float[,][]) : float[,] =
+        let validMethod =
+            match method.ToLower() with
+            | "min" -> "min"
+            | "average" -> "average"
+            | _ -> "average" // Default to average for unknown methods
+
         let height = heightMaps.[0].GetLength(0)
         let width = heightMaps.[0].GetLength(1)
 
@@ -65,10 +71,15 @@ module Integration =
                 |> Array.map (fun hm -> hm.[y, x])
                 |> Array.filter (fun v -> not (Double.IsNaN v))
 
-            if values.Length = 0 then 0.0 else Array.average values)
+            if values.Length = 0 then
+                0.0
+            else
+                match validMethod with
+                | "min" -> Array.min values
+                | _ -> Array.average values) // Default to average
 
     /// Calculate minimum iterations needed to ensure all pixels are reached from border seeds
-    let private calculateMinIterations (width: int) (height: int) (seedCount: int) : int =
+    let calculateMinIterations (width: int) (height: int) (seedCount: int) : int =
         // For single seed, use diagonal distance
         if seedCount = 1 then
             int (sqrt (float (width * width + height * height))) + 10
@@ -142,6 +153,7 @@ module Integration =
         (maxIter: int option)
         (eps: float option)
         (borderSeedCount: int option)
+        (combineMethod: string option) // New parameter for combination method
         : float[,] =
 
         let height = normals.GetLength(0)
@@ -152,6 +164,7 @@ module Integration =
         let eta0 = defaultArg eta0 0.05
         let tau = defaultArg tau 100.0
         let eps = defaultArg eps 1e-5
+        let combineMethod = defaultArg combineMethod "average" // Default combination method
 
         // Automatically determine iterations if not specified
         let maxIter =
@@ -160,6 +173,7 @@ module Integration =
             | None -> calculateMinIterations width height borderSeedCount
 
         printfn $"Image dimensions: {width}x{height}, border seeds: {borderSeedCount}, iterations: {maxIter}"
+        printfn $"Combination method: {combineMethod}"
 
         // Preprocess normals
         let processedNormals = preprocessNormals normals
@@ -176,8 +190,8 @@ module Integration =
                 (fun seedPoint -> reconstructHeightFromNormals processedNormals (seedPoint, 0.0) eta0 tau maxIter eps)
                 seedPoints
 
-        // Combine results
-        combineHeightMaps heightMaps
+        // Combine results using specified method
+        combineHeightMaps combineMethod heightMaps
 
     let estimateHeightMap
         (normalMap: Image<Rgba32>)
@@ -186,6 +200,7 @@ module Integration =
         (maxIter: int option)
         (eps: float option)
         (borderSeedCount: int option)
+        (combineMethod: string option) // New parameter
         : float[,] =
 
         let height = normalMap.Height
@@ -208,4 +223,4 @@ module Integration =
                   Alpha = alpha })
 
         // Perform reconstruction integration
-        integrateUsingReconstruction normals eta0 tau maxIter eps borderSeedCount
+        integrateUsingReconstruction normals eta0 tau maxIter eps borderSeedCount combineMethod
