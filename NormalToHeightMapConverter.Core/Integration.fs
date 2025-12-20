@@ -18,12 +18,41 @@ module Integration =
             if n.Alpha < 0.5 then
                 { Nx = 0.0; Ny = 0.0; Nz = 1.0 }
             else
-                // Ensure normals are normalized
-                let mag = sqrt (n.Nx * n.Nx + n.Ny * n.Ny + n.Nz * n.Nz)
-                let nx = if mag > 1e-6 then n.Nx / mag else 0.0
-                let ny = if mag > 1e-6 then n.Ny / mag else 0.0
-                let nz = if mag > 1e-6 then n.Nz / mag else 1.0
-                { Nx = nx; Ny = ny; Nz = nz })
+                let r = n.Nx
+                let g = n.Ny
+                let b = n.Nz
+
+                let mag_original = sqrt (r * r + g * g + b * b)
+                let diff = abs (mag_original - 1.0)
+
+                // Normalize the original vector if possible
+                let nx_norm, ny_norm, nz_norm =
+                    if mag_original > 1e-6 then
+                        r / mag_original, g / mag_original, b / mag_original
+                    else
+                        0.0, 0.0, 1.0
+
+                // Calculate weight based on deviation from unit length
+                let weight =
+                    if diff < 0.02 then 1.0
+                    elif diff < 0.3 then (0.3 - diff) / 0.28 // Linear drop from 1.0 to 0.0 between 0.02 and 0.3
+                    else 0.0
+
+                // Blend normalized vector with default upward normal (0,0,1)
+                let blended_nx = weight * nx_norm
+                let blended_ny = weight * ny_norm
+                let blended_nz = weight * nz_norm + (1.0 - weight) * 1.0
+
+                // Normalize the blended vector
+                let mag_blended =
+                    sqrt (blended_nx * blended_nx + blended_ny * blended_ny + blended_nz * blended_nz)
+
+                if mag_blended < 1e-6 then
+                    { Nx = 0.0; Ny = 0.0; Nz = 1.0 }
+                else
+                    { Nx = blended_nx / mag_blended
+                      Ny = blended_ny / mag_blended
+                      Nz = blended_nz / mag_blended })
 
     let private combineHeightMaps (heightMaps: float[,][]) : float[,] =
         let sampleCount = heightMaps.Length
@@ -45,8 +74,8 @@ module Integration =
             int (sqrt (float (width * width + height * height))) + 10
         else
             // For multiple border seeds, use half the smaller dimension plus buffer
-            let minDimension = min width height
-            max 20 (min 2000 (minDimension / 2 + 20))
+            let maxDimension = max width height
+            max 20 (min 2000 (maxDimension))
 
     /// Generate equally spaced seed points around the image border
     let private generateBorderSeeds (width: int) (height: int) (count: int) : Point[] =
