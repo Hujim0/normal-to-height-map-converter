@@ -5,8 +5,8 @@ open System
 open System.Collections.Generic
 
 module Reconstruct =
+    open SixLabors.ImageSharp
     type Normal = { Nx: float; Ny: float; Nz: float }
-    type Point = { X: int; Y: int }
 
     type private FoldState = { Frontier: Queue<Point>; Iter: int }
 
@@ -68,7 +68,8 @@ module Reconstruct =
 
                                 if not (Double.IsNaN(currentHeight)) then
                                     let newZ = currentHeight + dz
-                                    let neighbor = { X = nx; Y = ny }
+
+                                    let neighbor = Point(nx, ny)
 
                                     if not (isFixedPoint neighbor) then
                                         match updates.TryGetValue(neighbor) with

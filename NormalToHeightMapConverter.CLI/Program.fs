@@ -9,6 +9,7 @@ type Arguments =
     | [<AltCommandLine "-e">] Eta0 of value: float
     | [<AltCommandLine "-t">] Tau of value: float
     | [<AltCommandLine "--eps">] Epsilon of value: float
+    | [<AltCommandLine "-s">] Seeds of count: int // Added border seed count parameter
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -19,6 +20,7 @@ type Arguments =
             | Eta0 _ -> "Initial step size (default: 0.05)"
             | Tau _ -> "Learning rate decay factor (default: 100.0)"
             | Epsilon _ -> "Convergence threshold (default: 1e-5)"
+            | Seeds _ -> "Number of seed points on border for reconstruction (default: 8)"
 
 module Main =
     open NormalToHeightMapConverter.Integration
@@ -34,10 +36,11 @@ module Main =
 
             let inputFile = results.GetResult(<@ Input @>, "input.png")
             let outputFile = results.GetResult(<@ Output @>, "output.png")
-            let iterations = results.GetResult(<@ Iterations @>, 100)
+            let iterations = results.TryGetResult(<@ Iterations @>)
             let eta0 = results.TryGetResult(<@ Eta0 @>)
             let tau = results.TryGetResult(<@ Tau @>)
             let eps = results.TryGetResult(<@ Epsilon @>)
+            let seeds = results.TryGetResult(<@ Seeds @>) // Get seed count parameter
 
             printfn $"Processing: {inputFile} -> {outputFile}"
             printfn $"Iterations: {iterations}"
@@ -54,11 +57,16 @@ module Main =
             | Some v -> printfn $"Epsilon: {v}"
             | None -> ()
 
+            match seeds with
+            | Some v -> printfn $"Border seeds: {v}"
+            | None -> printfn "Border seeds: 8 (default)"
+
             printfn "Loading normal map..."
             let normalMap = loadNormalMap inputFile
 
             printfn "Estimating height map..."
-            let heightMap = estimateHeightMap normalMap eta0 tau None eps
+            // Pass seeds parameter to estimateHeightMap
+            let heightMap = estimateHeightMap normalMap eta0 tau iterations eps seeds
 
             printfn "Saving result..."
             saveHeightMapAsImage heightMap outputFile
