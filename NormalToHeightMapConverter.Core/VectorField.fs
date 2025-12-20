@@ -2,83 +2,122 @@ namespace NormalToHeightMapConverter
 
 module VectorField =
     open NormalToHeightMapConverter.PointTypes
-    open OpenCvSharp
+    open MathNet.Numerics
+    open MathNet.Numerics.LinearAlgebra
     open System
+
+    let private createRotationMatrix (angleDegrees: float) (centerX: float) (centerY: float) =
+        let angleRadians = -angleDegrees * Math.PI / 180.0
+        let cosAngle = cos angleRadians
+        let sinAngle = sin angleRadians
+
+        // Create 3x3 affine transformation matrix for rotation around center
+        let m = Matrix<float>.Build.Dense(3, 3)
+        m.[0, 0] <- cosAngle
+        m.[0, 1] <- -sinAngle
+        m.[0, 2] <- centerX * (1.0 - cosAngle) + centerY * sinAngle
+        m.[1, 0] <- sinAngle
+        m.[1, 1] <- cosAngle
+        m.[1, 2] <- centerY * (1.0 - cosAngle) - centerX * sinAngle
+        m.[2, 2] <- 1.0
+        m
+
+    let private getRotatedBounds (width: float) (height: float) (rotationMatrix: Matrix<float>) =
+        // Get corners of original image
+        let corners =
+            [ [| 0.0; 0.0; 1.0 |]
+              [| width; 0.0; 1.0 |]
+              [| width; height; 1.0 |]
+              [| 0.0; height; 1.0 |] ]
+
+        // Apply rotation to corners
+        let rotatedCorners =
+            corners
+            |> List.map (fun corner ->
+                let vec = Vector<float>.Build.DenseOfArray(corner)
+                let result = rotationMatrix * vec
+                (result.[0] / result.[2], result.[1] / result.[2]))
+
+        // Find bounding box
+        let minX = rotatedCorners |> List.minBy fst |> fst
+        let maxX = rotatedCorners |> List.maxBy fst |> fst
+        let minY = rotatedCorners |> List.minBy snd |> snd
+        let maxY = rotatedCorners |> List.maxBy snd |> snd
+
+        (floor minX, ceil maxX, floor minY, ceil maxY)
+
+    let private applyRotation
+        (matrix: float[,])
+        (rotationMatrix: Matrix<float>)
+        (bounds: float * float * float * float)
+        =
+        let height = matrix.GetLength(0)
+        let width = matrix.GetLength(1)
+        let (minX, maxX, minY, maxY) = bounds
+
+        let newWidth = int (ceil (maxX - minX))
+        let newHeight = int (ceil (maxY - minY))
+
+        // Create result matrix
+        let result = Array2D.zeroCreate<float> newHeight newWidth
+
+        // Inverse rotation matrix for sampling
+        let inverseRotation = rotationMatrix.Inverse()
+
+        // Apply bilinear interpolation
+        for y = 0 to newHeight - 1 do
+            for x = 0 to newWidth - 1 do
+                // Map from output coordinates to input coordinates
+                let srcX = float x + minX
+                let srcY = float y + minY
+
+                // Apply inverse transformation
+                let homogeneous = Vector<float>.Build.Dense([| srcX; srcY; 1.0 |])
+                let transformed = inverseRotation * homogeneous
+
+                let origX = transformed.[0] / transformed.[2]
+                let origY = transformed.[1] / transformed.[2]
+
+                // Bilinear interpolation
+                let x0 = int (floor origX)
+                let y0 = int (floor origY)
+                let x1 = x0 + 1
+                let y1 = y0 + 1
+
+                let dx = origX - float x0
+                let dy = origY - float y0
+
+                // Check bounds and interpolate
+                if x0 >= 0 && x1 < width && y0 >= 0 && y1 < height then
+                    let v00 = matrix.[y0, x0]
+                    let v01 = matrix.[y0, x1]
+                    let v10 = matrix.[y1, x0]
+                    let v11 = matrix.[y1, x1]
+
+                    let top = v00 * (1.0 - dx) + v01 * dx
+                    let bottom = v10 * (1.0 - dx) + v11 * dx
+                    result.[y, x] <- top * (1.0 - dy) + bottom * dy
+                else
+                    result.[y, x] <- 0.0
+
+        result
 
     let rotateFloatMatrix (matrix: float[,]) (angleDegrees: float) : float[,] =
         let height = matrix.GetLength(0)
         let width = matrix.GetLength(1)
 
-        use src = new Mat(height, width, MatType.CV_64FC1)
+        // Calculate center
+        let centerX = float (width - 1) / 2.0
+        let centerY = float (height - 1) / 2.0
 
-        // Fill the matrix with float values
-        for y = 0 to height - 1 do
-            for x = 0 to width - 1 do
-                src.Set<double>(y, x, matrix.[y, x])
+        // Create rotation matrix
+        let rotationMatrix = createRotationMatrix angleDegrees centerX centerY
 
-        let center = new Point2f(float32 (width - 1) / 2.0f, float32 (height - 1) / 2.0f)
-        let rotationMatrix = Cv2.GetRotationMatrix2D(center, -angleDegrees, 1.0)
+        // Get bounds of rotated image
+        let bounds = getRotatedBounds (float width) (float height) rotationMatrix
 
-        // Calculate the bounding rectangle of the rotated image
-        let corners =
-            [| new Point2f(0.0f, 0.0f)
-               new Point2f(float32 width, 0.0f)
-               new Point2f(float32 width, float32 height)
-               new Point2f(0.0f, float32 height) |]
-
-        let rotatedCorners =
-            corners
-            |> Array.map (fun p ->
-                let x =
-                    rotationMatrix.Get<double>(0, 0) * float p.X
-                    + rotationMatrix.Get<double>(0, 1) * float p.Y
-                    + rotationMatrix.Get<double>(0, 2)
-
-                let y =
-                    rotationMatrix.Get<double>(1, 0) * float p.X
-                    + rotationMatrix.Get<double>(1, 1) * float p.Y
-                    + rotationMatrix.Get<double>(1, 2)
-
-                new Point2f(float32 x, float32 y))
-
-        // Find bounding rectangle of rotated corners
-        let minX = rotatedCorners |> Array.minBy (fun p -> p.X) |> (fun p -> p.X)
-        let maxX = rotatedCorners |> Array.maxBy (fun p -> p.X) |> (fun p -> p.X)
-        let minY = rotatedCorners |> Array.minBy (fun p -> p.Y) |> (fun p -> p.Y)
-        let maxY = rotatedCorners |> Array.maxBy (fun p -> p.Y) |> (fun p -> p.Y)
-
-        let boundingRect =
-            new Rect(
-                int (floor (float minX)),
-                int (floor (float minY)),
-                int (ceil (float (maxX - minX))),
-                int (ceil (float (maxY - minY)))
-            )
-
-        // Adjust rotation matrix to account for translation
-        rotationMatrix.Set(0, 2, rotationMatrix.Get<double>(0, 2) - float boundingRect.X)
-        rotationMatrix.Set(1, 2, rotationMatrix.Get<double>(1, 2) - float boundingRect.Y)
-
-        use dst = new Mat(boundingRect.Height, boundingRect.Width, MatType.CV_64FC1)
-
-        Cv2.WarpAffine(
-            src,
-            dst,
-            rotationMatrix,
-            new Size(boundingRect.Width, boundingRect.Height),
-            InterpolationFlags.Linear,
-            BorderTypes.Constant,
-            Scalar.All(0.0)
-        )
-
-        // Convert back to F# array
-        let result = Array2D.zeroCreate<float> boundingRect.Height boundingRect.Width
-
-        for y = 0 to boundingRect.Height - 1 do
-            for x = 0 to boundingRect.Width - 1 do
-                result.[y, x] <- dst.Get<double>(y, x)
-
-        result
+        // Apply rotation with bilinear interpolation
+        applyRotation matrix rotationMatrix bounds
 
     let rotateNormalVectorField (normals: NormalVector[,]) (angleDegrees: float) : NormalVector[,] =
         let height = normals.GetLength(0)

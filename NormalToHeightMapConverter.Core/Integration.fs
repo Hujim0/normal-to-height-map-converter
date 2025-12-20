@@ -3,10 +3,12 @@ namespace NormalToHeightMapConverter
 open NormalToHeightMapConverter.VectorField
 open NormalToHeightMapConverter.PointTypes
 open System
+open SixLabors.ImageSharp
+open SixLabors.ImageSharp.PixelFormats
+open SixLabors.ImageSharp.Processing
 
 module Integration =
     open MathNet.Numerics.Statistics
-    open OpenCvSharp
 
     type IntegrationMethod =
         | Sum
@@ -33,7 +35,6 @@ module Integration =
                 result.[y, x] <- sum / float sampleCount
 
         result
-
 
     let private integrateSum (gradientField: float[,]) axis : float[,] =
         let h = gradientField.GetLength(0)
@@ -141,10 +142,8 @@ module Integration =
         (integrationMethod: IntegrationMethod)
         : float[,] * float[,] * float[,] * float[,] =
 
-        // Left heights (left to right)
         let leftHeights = integrateGradientField leftGradients 1 integrationMethod
 
-        // Right heights (right to left)
         let height = leftGradients.GetLength(0)
         let width = leftGradients.GetLength(1)
 
@@ -157,10 +156,8 @@ module Integration =
         let rightHeights =
             Array2D.init height width (fun y x -> flippedRightHeights.[y, width - 1 - x])
 
-        // Top heights (top to bottom)
         let topHeights = integrateGradientField topGradients 0 integrationMethod
 
-        // Bottom heights (bottom to top)
         let flippedTopGradients =
             Array2D.init height width (fun y x -> -topGradients.[height - 1 - y, x])
 
@@ -171,8 +168,6 @@ module Integration =
             Array2D.init height width (fun y x -> flippedBottomHeights.[height - 1 - y, x])
 
         leftHeights, rightHeights, topHeights, bottomHeights
-
-
 
     let calculateConfidence (heights: float[,][]) : float[,] =
         let sampleCount = heights.Length
@@ -197,10 +192,9 @@ module Integration =
                     else
                         0.0
 
-                result.[y, x] <- -stdDev // Negative std dev as confidence
+                result.[y, x] <- -stdDev
 
         result
-
 
     let inline clip (value: float) (minValue: float) (maxValue: float) = max minValue (min maxValue value)
 
@@ -224,7 +218,6 @@ module Integration =
 
         leftGradients, topGradients
 
-
     let private processAngle
         (vectorField: NormalVector[,])
         (angle: float)
@@ -234,12 +227,9 @@ module Integration =
 
         let height, width = originalShape
 
-        // Rotate the vector field image
         let rotatedFieldImage = rotateNormalVectorField vectorField angle
-        // Rotate the normals correctly
         let rotatedField = rotateVectorFieldNormals rotatedFieldImage angle
 
-        // Handle alpha channel (transparency)
         let h = rotatedField.GetLength(0)
         let w = rotatedField.GetLength(1)
 
@@ -255,20 +245,16 @@ module Integration =
                             Nz = 1.0
                             Alpha = n.Alpha }
 
-        // Calculate gradients and heights
         let leftGradients, topGradients = calculateGradients rotatedField
 
         let leftHeights, rightHeights, topHeights, bottomHeights =
             calculateHeights leftGradients topGradients integrationMethod
 
-        // Combine directional heights
         let combinedHeights =
             combineHeights [| leftHeights; rightHeights; topHeights; bottomHeights |]
 
-        // Rotate back to original orientation
         let unrotatedHeights = rotateFloatMatrix combinedHeights -angle
 
-        // Crop to original dimensions
         centeredCrop unrotatedHeights height width
 
     let integrateVectorField
@@ -286,7 +272,6 @@ module Integration =
             [| 0.0 .. (90.0 / float targetIterationCount) .. 90.0 |]
             |> Array.take targetIterationCount
 
-        // Process angles in parallel
         let results =
             angles
             |> Array.Parallel.map (fun angle -> processAngle vectorField angle integrationMethod originalShape)
@@ -295,22 +280,25 @@ module Integration =
         combineHeights results
 
     let estimateHeightMap
-        (normalMap: OpenCvSharp.Mat)
+        (normalMap: Image<Rgba32>)
         (targetIterationCount: int)
         (integrationMethod: IntegrationMethod)
         : float[,] =
 
-        let height = normalMap.Rows
-        let width = normalMap.Cols
+        let height = normalMap.Height
+        let width = normalMap.Width
 
-        // Convert OpenCvSharp Mat to Normal array
+        // Convert ImageSharp image to Normal array
         let normals =
             Array2D.init height width (fun y x ->
-                let pixel = normalMap.At<Vec3b>(y, x)
-                // Convert BGR to RGB and normalize to [-1, 1]
-                let r = (float pixel.Item2 / 255.0 * 2.0) - 1.0
-                let g = (float pixel.Item1 / 255.0 * 2.0) - 1.0
-                let b = (float pixel.Item0 / 255.0 * 2.0) - 1.0
+                let pixel = normalMap[x, y] // ImageSharp uses [x, y] indexing
+
+                // Convert RGBA to normalized normal vector
+                // Assuming the normal map stores normals in RGB channels (0-255) that need to be mapped to [-1, 1]
+                let r = (float pixel.R / 255.0 * 2.0) - 1.0
+                let g = (float pixel.G / 255.0 * 2.0) - 1.0
+                let b = (float pixel.B / 255.0 * 2.0) - 1.0
+                let alpha = float pixel.A / 255.0
 
                 // Normalize the vector
                 let magnitude = sqrt (r * r + g * g + b * b)
@@ -321,7 +309,7 @@ module Integration =
                 { Nx = nx
                   Ny = ny
                   Nz = nz
-                  Alpha = 1.0 })
+                  Alpha = alpha })
 
         // Integrate the vector field
         integrateVectorField normals targetIterationCount integrationMethod

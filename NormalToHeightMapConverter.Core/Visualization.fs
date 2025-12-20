@@ -1,8 +1,10 @@
 namespace NormalToHeightMapConverter
 
 open System
-open System.Drawing
-open System.Drawing.Imaging
+open SixLabors.ImageSharp
+open SixLabors.ImageSharp.PixelFormats
+open SixLabors.ImageSharp.Processing
+open SixLabors.ImageSharp.Formats.Png
 
 module Visualization =
 
@@ -22,16 +24,12 @@ module Visualization =
                     minValue <- min minValue v
                     maxValue <- max maxValue v
 
-        use bitmap = new Bitmap(width, height, PixelFormat.Format8bppIndexed)
-        let palette = bitmap.Palette
-
-        for i = 0 to 255 do
-            palette.Entries.[i] <- Color.FromArgb(i, i, i)
-
-        bitmap.Palette <- palette
-
+        // Handle case where all values are the same
         let range = maxValue - minValue
         let range = if range < 1e-10 then 1.0 else range
+
+        // Create a grayscale image using L8 (8-bit luminance)
+        use image = new Image<L8>(width, height)
 
         for y = 0 to height - 1 do
             for x = 0 to width - 1 do
@@ -44,6 +42,10 @@ module Visualization =
                         (value - minValue) / range
 
                 let byteValue = byte (max 0.0 (min 1.0 normalized) * 255.0)
-                bitmap.SetPixel(x, y, Color.FromArgb(int byteValue, int byteValue, int byteValue))
 
-        bitmap.Save(outputPath, ImageFormat.Png)
+                // Set pixel value
+                image.[x, y] <- L8(byteValue)
+
+        // Save with optimal PNG compression using initialization syntax
+        let encoder = PngEncoder(CompressionLevel = PngCompressionLevel.BestCompression)
+        image.Save(outputPath, encoder)
