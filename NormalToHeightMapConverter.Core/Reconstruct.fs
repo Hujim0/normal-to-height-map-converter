@@ -1,14 +1,16 @@
 namespace NormalToHeightMapConverter
 
-
 open System
 open System.Collections.Generic
+open SixLabors.ImageSharp
 
 module Reconstruct =
-    open SixLabors.ImageSharp
     type Normal = { Nx: float; Ny: float; Nz: float }
 
-    type private FoldState = { Frontier: Queue<Point>; Iter: int }
+    type private FoldState =
+        { Frontier: Queue<Point>
+          Iter: int
+          CurrentNormals: Normal[,] }
 
     let reconstructHeightFromNormals
         (normals: Normal[,])
@@ -22,8 +24,18 @@ module Reconstruct =
         let H = normals.GetLength(0)
         let W = normals.GetLength(1)
 
+        // Create mutable copy of normals and adjust seed if needed
+        let currentNormals = Array2D.init H W (fun y x -> normals.[y, x])
+        let (seedPt, originalSeedZ) = seed
+
+        let seedZ =
+            if originalSeedZ < 0.0 then
+                currentNormals.[seedPt.Y, seedPt.X] <- { Nx = 0.0; Ny = 0.0; Nz = 1.0 }
+                0.0
+            else
+                originalSeedZ
+
         let z = Array2D.create H W Double.NaN
-        let (seedPt, seedZ) = seed
         z.[seedPt.Y, seedPt.X] <- seedZ
 
         let directions = [| (1, 0); (-1, 0); (0, 1); (0, -1) |]
@@ -43,7 +55,8 @@ module Reconstruct =
                 let q = Queue<Point>()
                 q.Enqueue(seedPt)
                 q
-              Iter = 0 }
+              Iter = 0
+              CurrentNormals = currentNormals }
 
         let folder state _ =
             if state.Iter >= maxIter then
@@ -55,7 +68,7 @@ module Reconstruct =
 
                 while state.Frontier.Count > 0 do
                     let p = state.Frontier.Dequeue()
-                    let n = normals.[p.Y, p.X]
+                    let n = state.CurrentNormals.[p.Y, p.X] // Use current (potentially corrected) normals
 
                     for (dx, dy) in directions do
                         let nx = p.X + dx
@@ -68,7 +81,6 @@ module Reconstruct =
 
                                 if not (Double.IsNaN(currentHeight)) then
                                     let newZ = currentHeight + dz
-
                                     let neighbor = Point(nx, ny)
 
                                     if not (isFixedPoint neighbor) then
@@ -80,7 +92,7 @@ module Reconstruct =
                                             updates.Add(neighbor, newList)
                             | None -> ()
 
-                // Apply updates
+                // Apply updates and handle height clamping/normal reset
                 for kvp in updates do
                     let pt = kvp.Key
                     let preds = kvp.Value
@@ -93,11 +105,19 @@ module Reconstruct =
                         else
                             (1.0 - eta) * current + eta * avgZ
 
+                    // Clamp negative heights and reset normal
+                    let finalZ, resetNeeded = if finalZ < 0.0 then (0.0, true) else (finalZ, false)
+
+                    if resetNeeded then
+                        state.CurrentNormals.[pt.Y, pt.X] <- { Nx = 0.0; Ny = 0.0; Nz = 1.0 }
+
                     z.[pt.Y, pt.X] <- finalZ
                     nextFrontier.Enqueue(pt)
 
                 { Frontier = nextFrontier
-                  Iter = state.Iter + 1 }
+                  Iter = state.Iter + 1
+                  CurrentNormals = state.CurrentNormals } // Persist updated normals
 
         Seq.init maxIter id |> Seq.fold folder initialState |> ignore
+
         z

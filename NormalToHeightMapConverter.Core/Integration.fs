@@ -86,7 +86,7 @@ module Integration =
         else
             // For multiple border seeds, use half the smaller dimension plus buffer
             let maxDimension = max width height
-            max 20 (min 2000 (maxDimension))
+            max 20 (min 2000 (maxDimension)) + 10
 
     /// Generate equally spaced seed points around the image border
     let private generateBorderSeeds (width: int) (height: int) (count: int) : Point[] =
