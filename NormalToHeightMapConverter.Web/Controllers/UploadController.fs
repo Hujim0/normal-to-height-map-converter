@@ -9,56 +9,66 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.FileProviders
 open Microsoft.Extensions.Hosting
-open Microsoft.Net.Http.Headers
 open Microsoft.AspNetCore.Http.Features
 
 module FileHelpers =
-    let validateNormalMap (filePath: string) : bool =
-        // TODO: Implement actual validation logic
-        true
+    let validateNormalMap (_: string) : bool = true
 
-    let generate3DModel (inputPath: string) (outputDir: string) : unit =
-        // TODO: Implement actual generation logic
+    let generate3DModel (_: string) (outputDir: string) : unit =
         let dummyContent = "Dummy 3D model content"
         File.WriteAllText(Path.Combine(outputDir, "model.obj"), dummyContent)
         File.WriteAllText(Path.Combine(outputDir, "model.mtl"), dummyContent)
         File.WriteAllBytes(Path.Combine(outputDir, "height_map.png"), [| 137uy; 80uy; 78uy; 71uy |])
         File.WriteAllBytes(Path.Combine(outputDir, "preview.png"), [| 137uy; 80uy; 78uy; 71uy |])
 
-    let sanitizeFileName (fileName: string) : string =
-        Path.GetFileName(fileName)
-        |> Seq.filter (fun c -> Char.IsLetterOrDigit(c) || c = '.' || c = '_' || c = '-' || c = ' ')
-        |> Seq.truncate 255
-        |> Seq.toArray
-        |> System.String
+    let sanitizeFileName (fileName: string) =
+        let clean =
+            Path.GetFileNameWithoutExtension(fileName)
+            |> Seq.filter (fun c -> Char.IsLetterOrDigit(c) || c = '_' || c = '-')
+            |> Seq.truncate 255
+            |> Seq.toArray
+            |> string
+
+        // Force valid extension (e.g., only .png/.jpg)
+        let ext =
+            match Path.GetExtension(fileName).ToLowerInvariant() with
+            | ".png"
+            | ".jpg"
+            | ".jpeg" -> Path.GetExtension fileName
+            | _ -> ".png"
+
+        $"{clean}{ext}"
 
     let computeSha256 (stream: Stream) : string =
         use sha256 = SHA256.Create()
         stream.Seek(0L, SeekOrigin.Begin) |> ignore
-        let hashBytes = sha256.ComputeHash(stream)
-        BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant()
+
+        sha256.ComputeHash(stream)
+        |> BitConverter.ToString
+        |> fun s -> s.Replace("-", "").ToLowerInvariant()
 
     let getFileType (fileName: string) : string =
-        let ext = Path.GetExtension(fileName).ToLowerInvariant()
-
-        match ext with
-        | ".png"
-        | ".jpg"
-        | ".jpeg"
-        | ".gif"
-        | ".webp"
-        | ".bmp"
-        | ".tiff" -> "image"
-        | ".obj"
-        | ".mtl" -> "model"
-        | _ -> "metadata"
+        Path.GetExtension(fileName).ToLowerInvariant()
+        |> function
+            | ".png"
+            | ".jpg"
+            | ".jpeg"
+            | ".gif"
+            | ".webp"
+            | ".bmp"
+            | ".tiff" -> "image"
+            | ".obj"
+            | ".mtl" -> "model"
+            | _ -> "metadata"
 
 [<ApiController>]
 [<Route("api")>]
-type UploadController(uploadPath: string) =
+type UploadController(settings: AppSettings) =
     inherit ControllerBase()
+
+    // Simple accessor using injected settings
+    let getUploadPath () = settings.UploadPath
 
     [<HttpPost("upload-normal")>]
     member this.UploadNormalMap() : Task<IActionResult> =
@@ -68,7 +78,7 @@ type UploadController(uploadPath: string) =
             else
                 let! form = this.Request.ReadFormAsync()
 
-                match form.Files |> Seq.tryHead with
+                match Seq.tryHead form.Files with
                 | None -> return this.BadRequest("No file uploaded") :> IActionResult
                 | Some f ->
                     let contentType = f.ContentType.ToLowerInvariant()
@@ -95,7 +105,7 @@ type UploadController(uploadPath: string) =
                             use stream = File.OpenRead(tempFile)
                             let fileHash = FileHelpers.computeSha256 stream
 
-                            let hashDir = Path.Combine(uploadPath, fileHash)
+                            let hashDir = Path.Combine(getUploadPath (), fileHash)
                             Directory.CreateDirectory(hashDir) |> ignore
 
                             let safeName = FileHelpers.sanitizeFileName f.FileName
@@ -127,14 +137,12 @@ type UploadController(uploadPath: string) =
     member this.GetUploadList(hash: string) : Task<IActionResult> =
         task {
             let normalizedHash = hash.ToLowerInvariant()
+            let hashRegex = "^[a-f0-9]{64}$"
 
-            if
-                normalizedHash.Length <> 64
-                || not (Regex.IsMatch(normalizedHash, "^[a-f0-9]{64}$"))
-            then
+            if normalizedHash.Length <> 64 || not (Regex.IsMatch(normalizedHash, hashRegex)) then
                 return this.BadRequest("Invalid hash format") :> IActionResult
             else
-                let dirPath = Path.Combine(uploadPath, normalizedHash)
+                let dirPath = Path.Combine(getUploadPath (), normalizedHash)
 
                 if not (Directory.Exists(dirPath)) then
                     return this.NotFound({| error = $"Directory with hash {hash} not found" |}) :> IActionResult
@@ -146,19 +154,14 @@ type UploadController(uploadPath: string) =
                             let fileName = fileInfo.Name
                             let fileType = FileHelpers.getFileType fileName
 
-                            // Safe URL construction with explicit parts
-                            let scheme = this.Request.Scheme
-                            let host = this.Request.Host.Value
-                            let escapedHash = Uri.EscapeDataString(normalizedHash)
-                            let baseUrl = $"{scheme}://{host}/upload/{escapedHash}"
+                            let baseUrl =
+                                $"{this.Request.Scheme}://{this.Request.Host.Value}/upload/{Uri.EscapeDataString(normalizedHash)}"
 
-                            let escapedFileName = Uri.EscapeDataString(fileName)
-                            let fileUrl = $"{baseUrl}/{escapedFileName}"
+                            let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
 
                             let previewUrl =
                                 if fileType = "model" then
-                                    let previewName = Uri.EscapeDataString("preview.png")
-                                    Some $"{baseUrl}/{previewName}"
+                                    Some $"""{baseUrl}/{Uri.EscapeDataString("preview.png")}"""
                                 else
                                     None
 

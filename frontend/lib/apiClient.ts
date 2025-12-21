@@ -3,7 +3,7 @@ import axios from 'axios';
 
 export const apiClient = axios.create({
   timeout: 10000,
-  baseURL: 'api/',
+  baseURL: '/',
 });
 
 // Add interceptors here if needed
