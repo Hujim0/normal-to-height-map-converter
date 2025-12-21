@@ -1,0 +1,17 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    location /uploads/ {
+        alias /usr/share/nginx/uploads/;
+
+        location ~ \.(sh|php|pl|py|exe)$ {
+            deny all;
+        }
+    }
+
+    location / {
+        return 404;
+    }
+
+}

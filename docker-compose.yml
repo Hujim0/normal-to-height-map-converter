@@ -3,6 +3,27 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
+    volumes:
+      - ./uploads:/usr/share/nginx/uploads:ro # Serve files (read-only for security)
     ports:
       - "80:80"
     restart: unless-stopped
+    depends_on:
+      - asp-net
+    networks:
+      - app-network
+
+  asp-net:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      - UPLOAD_PATH=/uploads # <-- Your app reads this
+    volumes:
+      - ./uploads:/uploads # Mount host ./uploads → container /uploads
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
