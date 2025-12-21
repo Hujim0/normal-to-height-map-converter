@@ -11,6 +11,7 @@ open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.AspNetCore.Http.Features
+open NormalToHeightMapConverter.Web.Services
 
 module FileHelpers =
     let validateNormalMap (_: string) : bool = true
@@ -19,8 +20,6 @@ module FileHelpers =
         let dummyContent = "Dummy 3D model content"
         File.WriteAllText(Path.Combine(outputDir, "model.obj"), dummyContent)
         File.WriteAllText(Path.Combine(outputDir, "model.mtl"), dummyContent)
-        File.WriteAllBytes(Path.Combine(outputDir, "height_map.png"), [| 137uy; 80uy; 78uy; 71uy |])
-        File.WriteAllBytes(Path.Combine(outputDir, "preview.png"), [| 137uy; 80uy; 78uy; 71uy |])
 
     let sanitizeFileName (fileName: string) =
         let clean =
@@ -64,7 +63,7 @@ module FileHelpers =
 
 [<ApiController>]
 [<Route("api")>]
-type UploadController(settings: AppSettings) =
+type UploadController(settings: AppSettings, heightMapService: IHeightMapService) =
     inherit ControllerBase()
 
     // Simple accessor using injected settings
@@ -126,6 +125,17 @@ type UploadController(settings: AppSettings) =
                                     )
                                     :> IActionResult
                             else
+                                let heightMapPath = Path.Combine(hashDir, "height_map.png")
+
+                                // Create settings object using configured defaults
+                                let generationSettings =
+                                    { Eta0 = settings.HeightMap.Eta0
+                                      Tau = settings.HeightMap.Tau
+                                      Epsilon = settings.HeightMap.Epsilon
+                                      Seeds = settings.HeightMap.Seeds
+                                      Combine = settings.HeightMap.Combine }
+
+                                heightMapService.GenerateFromPath(normalMapPath, heightMapPath, generationSettings)
                                 FileHelpers.generate3DModel normalMapPath hashDir
                                 return this.Ok({| hash = fileHash |}) :> IActionResult
                         finally

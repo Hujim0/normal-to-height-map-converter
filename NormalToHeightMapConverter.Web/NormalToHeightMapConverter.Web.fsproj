@@ -4,7 +4,10 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
-  <ItemGroup><Compile Include="AppSettings.fs" /><Compile Include="Controllers/UploadController.fs" />
+  <ItemGroup>
+  <Compile Include="AppSettings.fs" />
+  <Compile Include="HeightMapService.fs" />
+  <Compile Include="Controllers/UploadController.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

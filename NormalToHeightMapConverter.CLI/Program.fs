@@ -85,7 +85,6 @@ module Main =
             let heightMap =
                 estimateHeightMap normalMap eta0 tau iterations eps seeds combineMethod
 
-            printfn "Saving result..."
             saveHeightMapAsImage heightMap outputFile
 
             printfn "Success!"

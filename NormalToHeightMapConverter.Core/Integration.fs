@@ -222,5 +222,6 @@ module Integration =
                   Nz = b
                   Alpha = alpha })
 
+        printfn $"Done!"
         // Perform reconstruction integration
         integrateUsingReconstruction normals eta0 tau maxIter eps borderSeedCount combineMethod

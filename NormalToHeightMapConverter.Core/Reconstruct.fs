@@ -66,6 +66,9 @@ module Reconstruct =
                 let nextFrontier = Queue<Point>()
                 let updates = Dictionary<Point, ResizeArray<float>>()
 
+                if state.Iter % 50 = 0 then
+                    printfn $"{state.Iter}"
+
                 while state.Frontier.Count > 0 do
                     let p = state.Frontier.Dequeue()
                     let n = state.CurrentNormals.[p.Y, p.X] // Use current (potentially corrected) normals

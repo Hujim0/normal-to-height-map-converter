@@ -9,6 +9,7 @@ open SixLabors.ImageSharp.Formats.Png
 module Visualization =
 
     let saveHeightMapAsImage (heightMap: float[,]) (outputPath: string) =
+        printfn $"Saving to {outputPath}"
         let height = heightMap.GetLength(0)
         let width = heightMap.GetLength(1)
 
@@ -49,3 +50,4 @@ module Visualization =
         // Save with optimal PNG compression using initialization syntax
         let encoder = PngEncoder(CompressionLevel = PngCompressionLevel.BestCompression)
         image.Save(outputPath, encoder)
+        printfn "Success!"
