@@ -4,10 +4,14 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup><Compile Include="Controllers/UploadController.fs" />
     <Compile Include="WeatherForecast.fs" />
     <Compile Include="Controllers/WeatherForecastController.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NormalToHeightMapConverter.Core\NormalToHeightMapConverter.Core.fsproj" />
   </ItemGroup>
 
 </Project>
