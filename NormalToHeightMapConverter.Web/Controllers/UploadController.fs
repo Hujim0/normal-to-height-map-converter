@@ -15,6 +15,8 @@ open NormalToHeightMapConverter.Web.Services
 
 module FileHelpers =
     open System.Runtime.InteropServices
+    open NormalToHeightMapConverter.Meshing
+
     let validateNormalMap (_: string) : bool = true
 
     let setFilePermissionsForWeb (filePath: string) =
@@ -32,10 +34,6 @@ module FileHelpers =
         | :? PlatformNotSupportedException -> ()
         | _ -> ()
 
-    let generate3DModel (_: string) (outputDir: string) : unit =
-        let dummyContent = "Dummy 3D model content"
-        File.WriteAllText(Path.Combine(outputDir, "model.obj"), dummyContent)
-        File.WriteAllText(Path.Combine(outputDir, "model.mtl"), dummyContent)
 
     let sanitizeFileName (fileName: string) =
         let clean =
@@ -142,8 +140,6 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                     )
                                     :> IActionResult
                             else
-                                let heightMapPath = Path.Combine(hashDir, "height_map.png")
-
                                 // Create settings object using configured defaults
                                 let generationSettings =
                                     { Eta0 = settings.HeightMap.Eta0
@@ -152,8 +148,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                       Seeds = settings.HeightMap.Seeds
                                       Combine = settings.HeightMap.Combine }
 
-                                heightMapService.GenerateFromPath(normalMapPath, heightMapPath, generationSettings)
-                                FileHelpers.generate3DModel normalMapPath hashDir
+                                heightMapService.GenerateFromPath(normalMapPath, hashDir, generationSettings)
                                 return this.Ok({| hash = fileHash |}) :> IActionResult
                         finally
                             if File.Exists(tempFile) then

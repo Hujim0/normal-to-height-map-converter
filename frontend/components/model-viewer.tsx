@@ -42,6 +42,25 @@ const useOBJMTL = (objUrl: string, mtlUrl?: string) => {
         if (materials) objLoader.setMaterials(materials);
 
         const loadedModel = await objLoader.loadAsync(objUrl);
+        loadedModel.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+
+            if (mesh.material && !Array.isArray(mesh.material)) {
+              mesh.material.side = THREE.DoubleSide;
+              mesh.material.needsUpdate = true;
+            }
+            else if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((mat) => {
+                if (mat) {
+                  mat.side = THREE.DoubleSide;
+                  mat.needsUpdate = true;
+                }
+              });
+            }
+          }
+        });
+
         loadedModel.position.set(0, 0, 0);
 
         // Center the model
@@ -239,7 +258,7 @@ export const ModelViewer = ({
       <Canvas
         camera={{ position: [0, 0, 5], fov: 50 }}
         onCreated={({ gl, camera }) => {
-          gl.setClearColor(0xf0f0f0);
+          gl.setClearColor(0x1e1e2e);
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -250,7 +269,7 @@ export const ModelViewer = ({
         onPointerMissed={handleError}
         dpr={[1, 2]}
       >
-        <color attach="background" args={[0xf0f0f0]} />
+        <color attach="background" args={[0x1e1e2e]} />
 
         <ambientLight intensity={0.5} />
         <directionalLight
