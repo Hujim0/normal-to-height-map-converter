@@ -33,9 +33,6 @@ export function useUploadImage() {
             return response.data;
         },
         onSuccess: (data) => {
-            // Invalidate relevant queries if needed
-            // queryClient.invalidateQueries({ queryKey: ['images'] });
-
             toast.success('File uploaded successfully!', {
                 description: `SHA-256: ${data.hash.substring(0, 8)}...`,
                 duration: 5000,

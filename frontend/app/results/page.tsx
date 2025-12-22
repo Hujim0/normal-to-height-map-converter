@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Download, Loader2, AlertCircle, FileText, LucideImage, Box } from "lucide-react";
 import { toast } from "sonner";
-import Image from 'next/image';
-import { ModelInfoPanel, ModelViewer } from '@/components/model-viewer';
+import { ModelViewer } from '@/components/model-viewer/model-viewer';
+import { ModelInfoPanel } from '@/components/model-viewer/model-info-panel';
 
 interface FileItem {
   filename: string;
