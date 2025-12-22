@@ -8,7 +8,6 @@ module Meshing =
         let w = Array2D.length1 heights
         let d = Array2D.length2 heights
 
-        // Step 1: Filter out heights < 0.5 and ceil to integer
         let hmap =
             Array2D.init w d (fun x z ->
                 let h = heights.[x, z]

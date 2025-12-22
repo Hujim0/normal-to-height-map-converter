@@ -36,7 +36,6 @@ export default function Home() {
   };
 
   const validateAndSetFile = (file: File) => {
-    // Validate file type
     const validTypes = [
       'image/jpeg',
       'image/png',
@@ -54,7 +53,6 @@ export default function Home() {
       return;
     }
 
-    // Validate file size (limit to 10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File size exceeds 10MB limit.");
       return;

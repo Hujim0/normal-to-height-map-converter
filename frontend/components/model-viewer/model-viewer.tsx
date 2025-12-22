@@ -32,7 +32,6 @@ export const ModelViewer = ({
     window.location.reload();
   };
 
-  // Preload GLTF models
   useEffect(() => {
     if (modelType === 'glb' || modelType === 'gltf') {
       import('@react-three/drei').then((drei) => {

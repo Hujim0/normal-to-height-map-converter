@@ -10,7 +10,7 @@ type Arguments =
     | [<AltCommandLine "-t">] Tau of value: float
     | [<AltCommandLine "--eps">] Epsilon of value: float
     | [<AltCommandLine "-s">] Seeds of count: int
-    | [<AltCommandLine "-c">] Combine of method: string // New combination method parameter
+    | [<AltCommandLine "-c">] Combine of method: string
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -45,7 +45,7 @@ module Main =
             let tau = results.TryGetResult(<@ Tau @>)
             let eps = results.TryGetResult(<@ Epsilon @>)
             let seeds = results.TryGetResult(<@ Seeds @>)
-            let combineMethod = results.TryGetResult(<@ Combine @>) // Get combination method
+            let combineMethod = results.TryGetResult(<@ Combine @>)
 
             printfn $"Processing: {inputFile} -> {outputFile}"
 
@@ -78,10 +78,10 @@ module Main =
             | None -> printfn "Combination method: average (default)"
 
             printfn "Loading normal map..."
-            let normalMap = loadNormalMap inputFile
+            let normalMap = loadNormalMapWithAlpha inputFile
 
             printfn "Estimating height map..."
-            // Pass seeds and combination method parameters
+
             let heightMap =
                 estimateHeightMap normalMap eta0 tau iterations eps seeds combineMethod
 

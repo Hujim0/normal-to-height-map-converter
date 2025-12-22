@@ -21,7 +21,6 @@ module FileHelpers =
 
     let setFilePermissionsForWeb (filePath: string) =
         try
-            // Only apply on Linux systems
             if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
                 let mode =
                     UnixFileMode.UserRead
@@ -43,7 +42,6 @@ module FileHelpers =
             |> Seq.toArray
             |> string
 
-        // Force valid extension (e.g., only .png/.jpg)
         let ext =
             match Path.GetExtension(fileName).ToLowerInvariant() with
             | ".png"
@@ -80,7 +78,6 @@ module FileHelpers =
 type UploadController(settings: AppSettings, heightMapService: IHeightMapService) =
     inherit ControllerBase()
 
-    // Simple accessor using injected settings
     let getUploadPath () = settings.UploadPath
 
     [<HttpPost("upload-normal")>]
@@ -140,7 +137,6 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                     )
                                     :> IActionResult
                             else
-                                // Create settings object using configured defaults
                                 let generationSettings =
                                     { Eta0 = settings.HeightMap.Eta0
                                       Tau = settings.HeightMap.Tau
@@ -176,9 +172,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             let fileName = fileInfo.Name
                             let fileType = FileHelpers.getFileType fileName
 
-                            let baseUrl =
-                                // $"{this.Request.Scheme}://{this.Request.Host.Value}/uploads/{Uri.EscapeDataString(normalizedHash)}"
-                                $"/uploads/{Uri.EscapeDataString(normalizedHash)}"
+                            let baseUrl = $"/uploads/{Uri.EscapeDataString(normalizedHash)}"
 
                             let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
 

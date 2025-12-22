@@ -99,7 +99,6 @@ export default function ResultsPage() {
     );
   }
 
-  // Helper function to find MTL file for an OBJ model (case-insensitive)
   const findMtlFile = (objFilename: string) => {
     const baseName = objFilename.replace(/\.obj$/i, '');
     return files.find(file =>

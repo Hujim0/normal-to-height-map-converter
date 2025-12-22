@@ -46,7 +46,6 @@ export const useOBJMTLLoader = (objUrl: string, mtlUrl?: string) => {
 
                 loadedModel.position.set(0, 0, 0);
 
-                // Center the model
                 const box = new THREE.Box3().setFromObject(loadedModel);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());

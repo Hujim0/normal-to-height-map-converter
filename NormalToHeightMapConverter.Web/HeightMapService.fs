@@ -17,13 +17,10 @@ type IHeightMapService =
 
 type HeightMapService() =
     let generate3DModel (outputDir: string) (heightMap: float array2d) : unit =
-        // Generate the mesh first to get the quads
         let (topQuads, sideFaces) = generateMesh heightMap
 
-        // Write the OBJ file
         writeObj (Path.Combine(outputDir, "model.obj")) (topQuads, sideFaces)
 
-        // Hardcoded MTL file content with proper materials and double-sided rendering
         let mtlContent =
             """
 # Terrain materials for Three.js compatibility
@@ -48,7 +45,6 @@ d 1.0               # Opacity
 side 2              # CRITICAL: Double-sided rendering
 """
 
-        // Write the proper MTL file
         File.WriteAllText(Path.Combine(outputDir, "model.mtl"), mtlContent)
 
 
@@ -61,7 +57,7 @@ side 2              # CRITICAL: Double-sided rendering
                     image
                     settings.Eta0
                     settings.Tau
-                    None // Auto-calculate iterations
+                    None
                     settings.Epsilon
                     settings.Seeds
                     (Some settings.Combine)
