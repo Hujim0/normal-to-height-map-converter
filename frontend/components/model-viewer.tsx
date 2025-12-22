@@ -72,10 +72,9 @@ const useOBJMTL = (objUrl: string, mtlUrl?: string) => {
         const fov = 50;
         const cameraZ = Math.abs(maxDim / Math.tan((fov * Math.PI) / 360));
 
-        loadedModel.position.x = -center.x;
-        loadedModel.position.y = -center.y;
-        loadedModel.position.z = -center.z;
-
+        loadedModel.position.x = -center.x / 2;
+        loadedModel.position.y = -center.y / 2;
+        loadedModel.position.z = -center.z / 2;
         setModel(loadedModel);
         setError(null);
       } catch (err) {
@@ -138,16 +137,6 @@ const GLBModel = ({ url }: { url: string }) => {
   );
 };
 
-// OBJ Model Component
-const OBJModel = ({ objFile, mtlFile }: { objFile: string; mtlFile?: string }) => {
-  const { model, loading, error } = useOBJMTL(objFile, mtlFile);
-
-  if (loading) return <ModelLoader />;
-  if (error) return <ModelError message={error} />;
-  if (!model) return null;
-
-  return <primitive object={model} scale={0.5} dispose={null} />;
-};
 
 // Auto-fit camera to model bounds with proper typing
 const AutoFitCamera = ({ model }: { model: THREE.Object3D }) => {
@@ -160,21 +149,56 @@ const AutoFitCamera = ({ model }: { model: THREE.Object3D }) => {
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
 
-    // Calculate max dimension properly
-    const maxDim = Math.max(size.x, size.y, size.z);
+    // Special handling for terrain models (flat, wide objects)
+    const isTerrain = size.y < Math.min(size.x, size.z) * 0.1;
 
-    // Cast camera to PerspectiveCamera to access fov property
+    // Cast camera to PerspectiveCamera
     if (!(camera instanceof THREE.PerspectiveCamera)) return;
 
     const fov = camera.fov * (Math.PI / 180);
-    const cameraZ = Math.abs(maxDim / Math.tan(fov / 2));
 
-    camera.position.set(center.x, center.y, cameraZ * 1.5);
-    camera.lookAt(center);
+    if (isTerrain) {
+      // Terrain-specific camera positioning
+      const diagonal = Math.sqrt(size.x * size.x + size.z * size.z);
+      const cameraZ = Math.abs(diagonal / 2) / Math.tan(fov / 2);
 
-    // Update controls target - use type guard
+      // Position camera above terrain looking down at 45 degrees
+      const elevation = diagonal * 0.7; // Height above terrain
+      const distance = cameraZ * 1.8;   // Extra padding for terrain
+
+      camera.position.set(
+        center.x,
+        center.y + elevation,
+        center.z + distance
+      );
+
+      // Look at a point slightly above the terrain center for better perspective
+      camera.lookAt(new THREE.Vector3(
+        center.x,
+        center.y + size.y * 0.3, // Look slightly above ground level
+        center.z
+      ));
+    } else {
+      // Standard camera fitting for regular models
+      const diagonal = Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
+      const radius = diagonal / 2;
+      const cameraZ = radius / Math.tan(fov / 2);
+
+      camera.position.set(
+        center.x,
+        center.y,
+        center.z + cameraZ * 1.8 // Increased padding
+      );
+      camera.lookAt(center);
+    }
+
+    // Update controls target
     if (isOrbitControls(controls)) {
-      controls.target.copy(center);
+      controls.target.copy(
+        isTerrain
+          ? new THREE.Vector3(center.x, center.y + size.y * 0.3, center.z)
+          : center
+      );
       controls.update();
     }
   }, [model, camera, controls]);
@@ -256,14 +280,15 @@ export const ModelViewer = ({
   return (
     <div className="bg-background border rounded-lg w-full h-64 md:h-96 overflow-hidden">
       <Canvas
-        camera={{ position: [0, 0, 5], fov: 50 }}
+        // Increased initial distance for large terrains
+        camera={{ position: [0, 150, 300], fov: 50 }}
         onCreated={({ gl, camera }) => {
           gl.setClearColor(0x1e1e2e);
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
 
           if (camera instanceof THREE.PerspectiveCamera) {
-            camera.far = 1000;
+            camera.far = 5000;
           }
         }}
         onPointerMissed={handleError}
@@ -273,10 +298,11 @@ export const ModelViewer = ({
 
         <ambientLight intensity={0.5} />
         <directionalLight
-          position={[10, 10, 5]}
+          position={[500, 500, 200]} // Moved farther for large terrains
           intensity={1}
           castShadow
-          shadow-mapSize={[1024, 1024]}
+          shadow-mapSize={[2048, 2048]} // Higher resolution shadows
+          shadow-camera-far={1000}
         />
         <hemisphereLight intensity={0.3} groundColor="lightblue" />
 
@@ -293,9 +319,11 @@ export const ModelViewer = ({
           enableDamping
           dampingFactor={0.1}
           rotateSpeed={0.5}
-          minDistance={2}
-          maxDistance={20}
+          minDistance={50}    // Increased min distance for large terrains
+          maxDistance={1000}  // Increased max distance
           autoRotate={false}
+          // Prevent extreme vertical rotations for terrains
+          maxPolarAngle={Math.PI * 0.45} // About 80 degrees from vertical
         />
       </Canvas>
     </div>
