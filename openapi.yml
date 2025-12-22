@@ -128,7 +128,6 @@ paths:
         - Original normal map image
         - Generated height map image
         - 3D model files (.obj, .mtl)
-        - Preview images
 
         Each entry includes metadata about how to use the file in web contexts.
       parameters:
@@ -174,11 +173,7 @@ paths:
                       format: uri
                       example: "https://api.example.com/upload/e3b0c44.../model.obj"
                       description: Direct URL for accessing the file
-                    preview_url:
-                      type: string
-                      format: uri
-                      example: "https://api.example.com/upload/e3b0c44.../preview.png"
-                      description: URL for HTML preview (only for models)
+
                   required:
                     - filename
                     - size

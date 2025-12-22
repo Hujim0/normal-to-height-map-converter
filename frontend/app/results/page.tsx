@@ -1,4 +1,3 @@
-// src/[hash]/page.tsx
 'use client';
 
 import { useParams, useSearchParams } from 'next/navigation';
@@ -99,6 +98,14 @@ export default function ResultsPage() {
       </div>
     );
   }
+
+  // Helper function to find MTL file for an OBJ model (case-insensitive)
+  const findMtlFile = (objFilename: string) => {
+    const baseName = objFilename.replace(/\.obj$/i, '');
+    return files.find(file =>
+      file.filename.toLowerCase() === `${baseName}.mtl`.toLowerCase()
+    );
+  };
 
   return (
     <div className="flex p-4 md:p-8 w-full min-h-screen">
@@ -217,15 +224,6 @@ export default function ResultsPage() {
                                     <Download className="mr-1 w-4 h-4" />
                                     Download
                                   </Button>
-                                  {file.preview_url && (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => window.open(file.preview_url, '_blank')}
-                                    >
-                                      Preview
-                                    </Button>
-                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -239,58 +237,55 @@ export default function ResultsPage() {
           </CardContent>
         </Card>
 
-        {/* Instructions Section */}
-        {files.some(file => file.type === 'model') && (
-          <div className="space-y-6">
-            {files
-              .filter(file => file.type === 'model')
-              .map((file) => {
-                const format = file.filename.split('.').pop()?.toLowerCase() || '';
-                const isGLB = ['glb', 'gltf'].includes(format);
-                const isOBJ = format === 'obj';
-                const mtlFile = isOBJ ? files.find(f => f.filename === file.filename.replace('.obj', '.mtl')) : null;
+        {/* Instructions Section - Only show for actual 3D models (not MTL files) */}
+        {files.some(file => {
+          const ext = file.filename.split('.').pop()?.toLowerCase();
+          return ext === 'obj' || ext === 'glb' || ext === 'gltf';
+        }) && (
+            <div className="space-y-6">
+              {files
+                .filter(file => {
+                  const ext = file.filename.split('.').pop()?.toLowerCase();
+                  return ext === 'obj' || ext === 'glb' || ext === 'gltf';
+                })
+                .map((file) => {
+                  const format = file.filename.split('.').pop()?.toLowerCase() || '';
+                  const isGLB = ['glb', 'gltf'].includes(format);
+                  const isOBJ = format === 'obj';
+                  const mtlFile = isOBJ ? findMtlFile(file.filename) : null;
 
-                return (
-                  <div key={file.filename} className="space-y-4">
-                    <div className="flex md:flex-row flex-col gap-4">
-                      <div className="w-full md:w-2/3">
-                        <ModelViewer
-                          modelUrl={file.url}
-                          modelType={isGLB ? (format as 'glb') : 'obj'}
-                          mtlUrl={mtlFile?.url}
-                        />
-                      </div>
-                      <div className="w-full md:w-1/3">
-                        <ModelInfoPanel
-                          filename={file.filename}
-                          size={file.size}
-                          format={format}
-                        />
-                        <div className="flex flex-wrap gap-2 mt-4">
-                          <Button
-                            className="w-full"
-                            onClick={() => handleDownload(file.url, file.filename)}
-                          >
-                            <Download className="mr-2 w-4 h-4" />
-                            Download Model
-                          </Button>
-                          {file.preview_url && (
+                  return (
+                    <div key={file.filename} className="space-y-4">
+                      <div className="flex md:flex-row flex-col gap-4">
+                        <div className="w-full md:w-2/3">
+                          <ModelViewer
+                            modelUrl={file.url}
+                            modelType={format as 'glb' | 'gltf' | 'obj'}
+                            mtlUrl={mtlFile?.url}
+                          />
+                        </div>
+                        <div className="w-full md:w-1/3">
+                          <ModelInfoPanel
+                            filename={file.filename}
+                            size={file.size}
+                            format={format}
+                          />
+                          <div className="flex flex-wrap gap-2 mt-4">
                             <Button
                               className="w-full"
-                              variant="secondary"
-                              onClick={() => window.open(file.preview_url, '_blank')}
+                              onClick={() => handleDownload(file.url, file.filename)}
                             >
-                              View Full Screen
+                              <Download className="mr-2 w-4 h-4" />
+                              Download Model
                             </Button>
-                          )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-          </div>
-        )}
+                  );
+                })}
+            </div>
+          )}
       </div>
     </div>
   );

@@ -187,18 +187,11 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
 
                             let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
 
-                            let previewUrl =
-                                if fileType = "model" then
-                                    Some $"""{baseUrl}/{Uri.EscapeDataString("preview.png")}"""
-                                else
-                                    None
-
                             {| filename = fileName
                                size = fileInfo.Length
                                last_modified = fileInfo.LastWriteTimeUtc.ToString("o")
                                ``type`` = fileType
-                               url = fileUrl
-                               preview_url = previewUrl |})
+                               url = fileUrl |})
 
                     return this.Ok(files) :> IActionResult
         }

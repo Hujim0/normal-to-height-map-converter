@@ -1,8 +1,7 @@
-// src/components/ModelViewer.tsx
 'use client';
 
 import { Suspense, useRef, useState, useEffect } from 'react';
-import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, Html, useProgress, useGLTF } from '@react-three/drei';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
@@ -20,11 +19,6 @@ interface OrbitControlsType {
 function isOrbitControls(controls: any): controls is OrbitControlsType {
   return controls && 'target' in controls && 'update' in controls;
 }
-
-// Define proper types for the model
-type OBJModelType = THREE.Group & {
-  position: THREE.Vector3;
-};
 
 // Custom OBJ+MTL loader hook with proper typing
 const useOBJMTL = (objUrl: string, mtlUrl?: string) => {
@@ -106,7 +100,7 @@ const ModelError = ({ message }: { message: string }) => {
 
 // GLB/GLTF Model Component
 const GLBModel = ({ url }: { url: string }) => {
-  const { scene, animations } = useGLTF(url);
+  const { scene } = useGLTF(url);
   const modelRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
@@ -156,7 +150,6 @@ const AutoFitCamera = ({ model }: { model: THREE.Object3D }) => {
     const fov = camera.fov * (Math.PI / 180);
     const cameraZ = Math.abs(maxDim / Math.tan(fov / 2));
 
-    // Create a new position vector instead of modifying directly
     camera.position.set(center.x, center.y, cameraZ * 1.5);
     camera.lookAt(center);
 
@@ -182,6 +175,22 @@ const GLBModelWithAutoFit = ({ url }: { url: string }) => {
   );
 };
 
+// OBJ Model Wrapper with AutoFitCamera
+const OBJModelWithAutoFit = ({ objFile, mtlFile }: { objFile: string; mtlFile?: string }) => {
+  const { model, loading, error } = useOBJMTL(objFile, mtlFile);
+
+  if (loading) return <ModelLoader />;
+  if (error) return <ModelError message={error} />;
+  if (!model) return null;
+
+  return (
+    <>
+      <primitive object={model} scale={0.5} dispose={null} />
+      <AutoFitCamera model={model} />
+    </>
+  );
+};
+
 // Main Model Viewer Component
 export const ModelViewer = ({
   modelUrl,
@@ -194,7 +203,6 @@ export const ModelViewer = ({
 }) => {
   const [error, setError] = useState<string | null>(null);
 
-  // Fix event handler type - should be MouseEvent
   const handleError = (event: MouseEvent) => {
     setError(`Failed to load model: Click missed`);
     console.error('Model loading error: pointer missed');
@@ -204,9 +212,7 @@ export const ModelViewer = ({
     setError(null);
     // Force reload by adding timestamp to URL
     const timestamp = Date.now();
-    if (modelType === 'obj' && mtlUrl) {
-      window.location.href = `${window.location.href.split('?')[0]}?retry=${timestamp}`;
-    }
+    window.location.href = `${window.location.href.split('?')[0]}?retry=${timestamp}`;
   };
 
   // Preload GLTF models
@@ -237,7 +243,6 @@ export const ModelViewer = ({
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.outputColorSpace = THREE.SRGBColorSpace;
 
-          // Ensure camera is properly typed
           if (camera instanceof THREE.PerspectiveCamera) {
             camera.far = 1000;
           }
@@ -260,7 +265,7 @@ export const ModelViewer = ({
           {modelType === 'glb' || modelType === 'gltf' ? (
             <GLBModelWithAutoFit url={modelUrl} />
           ) : modelType === 'obj' ? (
-            <OBJModel objFile={modelUrl} mtlFile={mtlUrl} />
+            <OBJModelWithAutoFit objFile={modelUrl} mtlFile={mtlUrl} />
           ) : null}
         </Suspense>
 
@@ -276,13 +281,6 @@ export const ModelViewer = ({
       </Canvas>
     </div>
   );
-};
-
-// Preload models for better performance
-export const preloadModel = (url: string, type: 'glb' | 'gltf' | 'obj') => {
-  if (type === 'glb' || type === 'gltf') {
-    useGLTF.preload(url);
-  }
 };
 
 // Helper component for model info panel
