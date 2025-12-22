@@ -7,8 +7,10 @@ import { AlertCircle, CheckCircle, ImageIcon, Loader2, X } from "lucide-react";
 import React from "react";
 import { toast } from "sonner";
 import { useUploadImage } from "@/hooks/use-upload-image";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const navigation = useRouter();
   const [file, setFile] = React.useState<File | null>(null);
   const [dragActive, setDragActive] = React.useState(false);
   const [uploadHash, setUploadHash] = React.useState<string | null>(null);
@@ -71,6 +73,7 @@ export default function Home() {
     uploadImage(file, {
       onSuccess: (data) => {
         setUploadHash(data.hash);
+        navigation.push(`/results?hash=${data.hash}`)
       }
     });
   };

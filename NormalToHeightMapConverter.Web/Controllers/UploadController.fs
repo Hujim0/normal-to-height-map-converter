@@ -14,7 +14,23 @@ open Microsoft.AspNetCore.Http.Features
 open NormalToHeightMapConverter.Web.Services
 
 module FileHelpers =
+    open System.Runtime.InteropServices
     let validateNormalMap (_: string) : bool = true
+
+    let setFilePermissionsForWeb (filePath: string) =
+        try
+            // Only apply on Linux systems
+            if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
+                let mode =
+                    UnixFileMode.UserRead
+                    ||| UnixFileMode.UserWrite
+                    ||| UnixFileMode.GroupRead
+                    ||| UnixFileMode.OtherRead
+
+                File.SetUnixFileMode(filePath, mode)
+        with
+        | :? PlatformNotSupportedException -> ()
+        | _ -> ()
 
     let generate3DModel (_: string) (outputDir: string) : unit =
         let dummyContent = "Dummy 3D model content"
@@ -111,6 +127,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             let ext = Path.GetExtension(safeName)
                             let normalMapPath = Path.Combine(hashDir, $"normal_map{ext}")
                             File.Move(tempFile, normalMapPath)
+                            FileHelpers.setFilePermissionsForWeb (normalMapPath)
 
                             if not (FileHelpers.validateNormalMap normalMapPath) then
                                 Directory.Delete(hashDir, true)
@@ -165,7 +182,8 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             let fileType = FileHelpers.getFileType fileName
 
                             let baseUrl =
-                                $"{this.Request.Scheme}://{this.Request.Host.Value}/upload/{Uri.EscapeDataString(normalizedHash)}"
+                                // $"{this.Request.Scheme}://{this.Request.Host.Value}/uploads/{Uri.EscapeDataString(normalizedHash)}"
+                                $"{this.Request.Scheme}://localhost/uploads/{Uri.EscapeDataString(normalizedHash)}"
 
                             let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
 
