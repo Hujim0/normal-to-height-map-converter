@@ -183,7 +183,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
 
                             let baseUrl =
                                 // $"{this.Request.Scheme}://{this.Request.Host.Value}/uploads/{Uri.EscapeDataString(normalizedHash)}"
-                                $"{this.Request.Scheme}://localhost/uploads/{Uri.EscapeDataString(normalizedHash)}"
+                                $"/uploads/{Uri.EscapeDataString(normalizedHash)}"
 
                             let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
 
