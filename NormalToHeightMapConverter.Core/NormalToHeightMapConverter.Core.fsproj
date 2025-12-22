@@ -5,7 +5,13 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <ItemGroup><Compile Include="Meshing.fs" /><Compile Include="Reconstruct.fs" /><Compile Include="PointTypes.fs" /><Compile Include="Visualization.fs" /><Compile Include="VectorField.fs" /><Compile Include="ImageProcessing.fs" /><Compile Include="Integration.fs" />
+  <ItemGroup>
+  <Compile Include="Meshing.fs" />
+  <Compile Include="Reconstruct.fs" />
+  <Compile Include="PointTypes.fs" />
+  <Compile Include="Visualization.fs" />
+  <Compile Include="ImageProcessing.fs" />
+  <Compile Include="Integration.fs" />
   </ItemGroup>
 
   <ItemGroup>

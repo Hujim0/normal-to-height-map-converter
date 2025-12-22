@@ -13,23 +13,37 @@ module Visualization =
         let height = heightMap.GetLength(0)
         let width = heightMap.GetLength(1)
 
-        // Find min and max values for normalization
-        let mutable minValue = Double.MaxValue
-        let mutable maxValue = Double.MinValue
+        // Collect all values into a sequence
+        let allValues =
+            seq {
+                for y = 0 to height - 1 do
+                    for x = 0 to width - 1 do
+                        yield heightMap.[y, x]
+            }
 
-        for y = 0 to height - 1 do
-            for x = 0 to width - 1 do
-                let v = heightMap.[y, x]
+        // Filter valid values (non-NaN, non-infinity)
+        let validValues =
+            allValues
+            |> Seq.filter (fun v -> not (Double.IsNaN v || Double.IsInfinity v))
+            |> Seq.toArray
 
-                if not (Double.IsNaN v || Double.IsInfinity v) then
-                    minValue <- min minValue v
-                    maxValue <- max maxValue v
+        // Handle case with no valid values
+        let (minValue, maxValue) =
+            if validValues.Length = 0 then
+                (0.0, 0.0) // Default when no valid values exist
+            else
+                (Array.min validValues, Array.max validValues)
 
-        // Handle case where all values are the same
+        // Calculate effective range with safeguards
         let range = maxValue - minValue
-        let range = if range < 1e-10 then 1.0 else range
 
-        // Create a grayscale image using L8 (8-bit luminance)
+        let effectiveRange =
+            if Double.IsNaN range || Double.IsInfinity range || abs range < 1e-10 then
+                1.0
+            else
+                range
+
+        // Create image with proper normalization
         use image = new Image<L8>(width, height)
 
         for y = 0 to height - 1 do
@@ -37,17 +51,13 @@ module Visualization =
                 let value = heightMap.[y, x]
 
                 let normalized =
-                    if Double.IsNaN value || Double.IsInfinity value then
-                        0.0
-                    else
-                        (value - minValue) / range
+                    match Double.IsNaN value, Double.IsInfinity value with
+                    | true, _
+                    | _, true -> 0.0
+                    | false, false -> (value - minValue) / effectiveRange |> max 0.0 |> min 1.0
 
-                let byteValue = byte (max 0.0 (min 1.0 normalized) * 255.0)
+                image.[x, y] <- L8(byte (normalized * 255.0))
 
-                // Set pixel value
-                image.[x, y] <- L8(byteValue)
-
-        // Save with optimal PNG compression using initialization syntax
-        let encoder = PngEncoder(CompressionLevel = PngCompressionLevel.BestCompression)
-        image.Save(outputPath, encoder)
+        // Save with optimal compression
+        image.Save(outputPath, PngEncoder(CompressionLevel = PngCompressionLevel.BestCompression))
         printfn "Success!"

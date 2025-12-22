@@ -24,7 +24,6 @@ module Reconstruct =
         let H = normals.GetLength(0)
         let W = normals.GetLength(1)
 
-        // Create mutable copy of normals and adjust seed if needed
         let currentNormals = Array2D.init H W (fun y x -> normals.[y, x])
         let (seedPt, originalSeedZ) = seed
 
@@ -71,7 +70,7 @@ module Reconstruct =
 
                 while state.Frontier.Count > 0 do
                     let p = state.Frontier.Dequeue()
-                    let n = state.CurrentNormals.[p.Y, p.X] // Use current (potentially corrected) normals
+                    let n = state.CurrentNormals.[p.Y, p.X]
 
                     for (dx, dy) in directions do
                         let nx = p.X + dx
@@ -95,7 +94,6 @@ module Reconstruct =
                                             updates.Add(neighbor, newList)
                             | None -> ()
 
-                // Apply updates and handle height clamping/normal reset
                 for kvp in updates do
                     let pt = kvp.Key
                     let preds = kvp.Value
@@ -108,7 +106,6 @@ module Reconstruct =
                         else
                             (1.0 - eta) * current + eta * avgZ
 
-                    // Clamp negative heights and reset normal
                     let finalZ, resetNeeded = if finalZ < 0.0 then (0.0, true) else (finalZ, false)
 
                     if resetNeeded then
@@ -119,7 +116,7 @@ module Reconstruct =
 
                 { Frontier = nextFrontier
                   Iter = state.Iter + 1
-                  CurrentNormals = state.CurrentNormals } // Persist updated normals
+                  CurrentNormals = state.CurrentNormals }
 
         Seq.init maxIter id |> Seq.fold folder initialState |> ignore
 
