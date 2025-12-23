@@ -88,7 +88,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
     member this.UploadNormalMap() : Task<IActionResult> =
         task {
             if not this.Request.HasFormContentType then
-                return this.BadRequest "Missing form data"
+                return this.BadRequest "Missing form data" :> IActionResult
             else
                 let! form = this.Request.ReadFormAsync()
 
@@ -97,29 +97,33 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                 | Some f ->
                     let contentType = f.ContentType.ToLowerInvariant()
 
-                    let validTypes =
-                        [ "image/jpeg"
-                          "image/png"
-                          "image/gif"
-                          "image/webp"
-                          "image/bmp"
-                          "image/tiff" ]
+                    let validContentTypes =
+                        set
+                            [ "image/jpeg"
+                              "image/png"
+                              "image/gif"
+                              "image/webp"
+                              "image/bmp"
+                              "image/tiff" ]
 
-                    if not (List.contains contentType validTypes) then
+                    if not (validContentTypes.Contains(contentType)) then
                         return
                             this.StatusCode(415, {| error = "Unsupported file type. Please upload an image file." |})
                             :> IActionResult
                     else
                         let tempFile = Path.GetTempFileName()
-                        let mutable fileHash = ""
-                        let mutable result = None
+
+                        let cleanupTempFile () =
+                            if File.Exists tempFile then
+                                File.Delete tempFile
 
                         try
                             use tempStream = new FileStream(tempFile, FileMode.Create)
                             do! f.CopyToAsync(tempStream)
 
-                            use stream = File.OpenRead tempFile
-                            fileHash <- FileHelpers.computeSha256 stream
+                            let fileHash =
+                                use stream = File.OpenRead tempFile
+                                FileHelpers.computeSha256 stream
 
                             let uploadPath = getUploadPath ()
                             let hashDir = Path.Combine(uploadPath, fileHash)
@@ -141,7 +145,7 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                 do! semaphore.WaitAsync() |> Async.AwaitTask
 
                                 if Directory.Exists hashDir then
-                                    result <- Some(this.Ok {| hash = fileHash |} :> IActionResult)
+                                    return this.Ok {| hash = fileHash |} :> IActionResult
                                 else
                                     Directory.CreateDirectory hashDir |> ignore
 
@@ -150,22 +154,21 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                     let normalMapPath = Path.Combine(hashDir, $"normal_map{ext}")
 
                                     File.Move(tempFile, normalMapPath)
-                                    FileHelpers.setFilePermissionsForWeb (normalMapPath)
+                                    FileHelpers.setFilePermissionsForWeb normalMapPath
+                                    cleanupTempFile () // Explicit cleanup since file was moved
 
                                     if not (FileHelpers.validateNormalMap normalMapPath) then
                                         Directory.Delete(hashDir, true)
 
-                                        result <-
-                                            Some(
-                                                this.StatusCode(
-                                                    422,
-                                                    {| error = "Uploaded image is not a valid normal map"
-                                                       details =
-                                                        [ "Blue channel values outside expected range"
-                                                          "Missing neutral gray baseline" ] |}
-                                                )
-                                                :> IActionResult
+                                        return
+                                            this.StatusCode(
+                                                422,
+                                                {| error = "Uploaded image is not a valid normal map"
+                                                   details =
+                                                    [ "Blue channel values outside expected range"
+                                                      "Missing neutral gray baseline" ] |}
                                             )
+                                            :> IActionResult
                                     else
                                         let generationSettings =
                                             { Eta0 = settings.HeightMap.Eta0
@@ -175,16 +178,12 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                               Combine = settings.HeightMap.Combine }
 
                                         heightMapService.GenerateFromPath(normalMapPath, hashDir, generationSettings)
-                                        result <- Some(this.Ok {| hash = fileHash |} :> IActionResult)
+                                        return this.Ok {| hash = fileHash |} :> IActionResult
                             finally
                                 semaphore.Release() |> ignore
-                        finally
-                            if File.Exists tempFile then
-                                File.Delete tempFile
-
-                        match result with
-                        | Some r -> return r
-                        | None -> return this.StatusCode(500, "Internal server error") :> IActionResult
+                        with ex ->
+                            cleanupTempFile ()
+                            return this.StatusCode(500, $"Internal server error: {ex.Message}") :> IActionResult
         }
 
     [<HttpGet("upload-list/{hash}")>]
@@ -209,7 +208,6 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             let fileType = FileHelpers.getFileType fileName
 
                             let baseUrl = $"/uploads/{Uri.EscapeDataString normalizedHash}"
-
                             let fileUrl = $"{baseUrl}/{Uri.EscapeDataString fileName}"
 
                             {| filename = fileName
