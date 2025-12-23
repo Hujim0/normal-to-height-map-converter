@@ -1,0 +1,21 @@
+
+# Terrain materials for Three.js compatibility
+# Double-sided rendering to prevent missing faces
+
+newmtl terrain_top
+Ka 0.3 0.3 0.3      # Ambient color (dark gray)
+Kd 0.7 0.7 0.7      # Diffuse color (light gray for top faces)
+Ks 0.0 0.0 0.0      # Specular color (no shininess)
+Ns 10.0             # Specular exponent (soft highlights)
+illum 2             # Illumination model (diffuse + specular)
+d 1.0               # Opacity (fully opaque)
+side 2              # CRITICAL: Double-sided rendering - fixes missing faces in Three.js
+
+newmtl terrain_side
+Ka 0.2 0.2 0.2      # Ambient color (darker for sides)
+Kd 0.4 0.4 0.4      # Diffuse color (medium gray for side faces)
+Ks 0.0 0.0 0.0      # Specular color (no shininess)
+Ns 10.0             # Specular exponent
+illum 2             # Illumination model
+d 1.0               # Opacity
+side 2              # CRITICAL: Double-sided rendering
