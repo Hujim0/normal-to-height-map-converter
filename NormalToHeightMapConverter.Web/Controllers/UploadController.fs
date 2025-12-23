@@ -4,7 +4,9 @@ open System
 open System.IO
 open System.Security.Cryptography
 open System.Text.RegularExpressions
+open System.Threading
 open System.Threading.Tasks
+open System.Collections.Concurrent
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Mvc
@@ -78,6 +80,9 @@ module FileHelpers =
 type UploadController(settings: AppSettings, heightMapService: IHeightMapService) =
     inherit ControllerBase()
 
+    // Static semaphore dictionary for hash-based locking
+    static let hashSemaphores = ConcurrentDictionary<string, SemaphoreSlim>()
+
     let getUploadPath () = settings.UploadPath
 
     [<HttpPost("upload-normal")>]
@@ -107,48 +112,80 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             :> IActionResult
                     else
                         let tempFile = Path.GetTempFileName()
+                        let mutable fileHash = ""
+                        let mutable result = None
 
                         try
                             use tempStream = new FileStream(tempFile, FileMode.Create)
                             do! f.CopyToAsync(tempStream)
 
                             use stream = File.OpenRead(tempFile)
-                            let fileHash = FileHelpers.computeSha256 stream
+                            fileHash <- FileHelpers.computeSha256 stream
 
-                            let hashDir = Path.Combine(getUploadPath (), fileHash)
-                            Directory.CreateDirectory(hashDir) |> ignore
+                            let uploadPath = getUploadPath ()
+                            let hashDir = Path.Combine(uploadPath, fileHash)
 
-                            let safeName = FileHelpers.sanitizeFileName f.FileName
-                            let ext = Path.GetExtension(safeName)
-                            let normalMapPath = Path.Combine(hashDir, $"normal_map{ext}")
-                            File.Move(tempFile, normalMapPath)
-                            FileHelpers.setFilePermissionsForWeb (normalMapPath)
+                            let semaphore =
+                                match hashSemaphores.TryGetValue(fileHash) with
+                                | true, s -> s
+                                | false, _ ->
+                                    let newSem = new SemaphoreSlim(1, 1)
+                                    let existing = hashSemaphores.GetOrAdd(fileHash, newSem)
 
-                            if not (FileHelpers.validateNormalMap normalMapPath) then
-                                Directory.Delete(hashDir, true)
+                                    if Object.ReferenceEquals(existing, newSem) then
+                                        newSem
+                                    else
+                                        newSem.Dispose()
+                                        existing
 
-                                return
-                                    this.StatusCode(
-                                        422,
-                                        {| error = "Uploaded image is not a valid normal map"
-                                           details =
-                                            [ "Blue channel values outside expected range"
-                                              "Missing neutral gray baseline" ] |}
-                                    )
-                                    :> IActionResult
-                            else
-                                let generationSettings =
-                                    { Eta0 = settings.HeightMap.Eta0
-                                      Tau = settings.HeightMap.Tau
-                                      Epsilon = settings.HeightMap.Epsilon
-                                      Seeds = settings.HeightMap.Seeds
-                                      Combine = settings.HeightMap.Combine }
+                            try
+                                do! semaphore.WaitAsync() |> Async.AwaitTask
 
-                                heightMapService.GenerateFromPath(normalMapPath, hashDir, generationSettings)
-                                return this.Ok({| hash = fileHash |}) :> IActionResult
+                                if Directory.Exists(hashDir) then
+                                    result <- Some(this.Ok({| hash = fileHash |}) :> IActionResult)
+                                else
+                                    Directory.CreateDirectory(hashDir) |> ignore
+
+                                    let safeName = FileHelpers.sanitizeFileName f.FileName
+                                    let ext = Path.GetExtension(safeName)
+                                    let normalMapPath = Path.Combine(hashDir, $"normal_map{ext}")
+
+                                    File.Move(tempFile, normalMapPath)
+                                    FileHelpers.setFilePermissionsForWeb (normalMapPath)
+
+                                    if not (FileHelpers.validateNormalMap normalMapPath) then
+                                        Directory.Delete(hashDir, true)
+
+                                        result <-
+                                            Some(
+                                                this.StatusCode(
+                                                    422,
+                                                    {| error = "Uploaded image is not a valid normal map"
+                                                       details =
+                                                        [ "Blue channel values outside expected range"
+                                                          "Missing neutral gray baseline" ] |}
+                                                )
+                                                :> IActionResult
+                                            )
+                                    else
+                                        let generationSettings =
+                                            { Eta0 = settings.HeightMap.Eta0
+                                              Tau = settings.HeightMap.Tau
+                                              Epsilon = settings.HeightMap.Epsilon
+                                              Seeds = settings.HeightMap.Seeds
+                                              Combine = settings.HeightMap.Combine }
+
+                                        heightMapService.GenerateFromPath(normalMapPath, hashDir, generationSettings)
+                                        result <- Some(this.Ok({| hash = fileHash |}) :> IActionResult)
+                            finally
+                                semaphore.Release() |> ignore
                         finally
                             if File.Exists(tempFile) then
                                 File.Delete(tempFile)
+
+                        match result with
+                        | Some r -> return r
+                        | None -> return this.StatusCode(500, "Internal server error") :> IActionResult
         }
 
     [<HttpGet("upload-list/{hash}")>]
