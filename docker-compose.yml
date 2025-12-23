@@ -3,13 +3,11 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
-    volumes:
-      - ./uploads:/usr/share/nginx/uploads:ro # Serve files (read-only for security)
     ports:
       - "80:80"
+    volumes:
+      - ./uploads:/usr/share/nginx/uploads:ro # Serve files (read-only for security)
     restart: unless-stopped
-    depends_on:
-      - asp-net
     networks:
       - app-network
 
@@ -23,6 +21,8 @@ services:
       - ./uploads:/uploads # Mount host ./uploads → container /uploads
     networks:
       - app-network
+    ports:
+      - "8080:8080"
 
 networks:
   app-network:

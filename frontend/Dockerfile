@@ -1,20 +1,19 @@
 FROM oven/bun:latest AS builder
-
 WORKDIR /app
-
 COPY package.json bun.lock ./
-
 RUN bun install
-
 COPY . .
-
 RUN bun run build
 
 FROM nginx:alpine
 
-COPY --from=builder /app/out /usr/share/nginx/html
+# Install required packages and fix permissions
+RUN apk add --no-cache wget \
+    && mkdir -p /usr/share/nginx/uploads
 
-COPY ../nginx/nginx.conf /etc/nginx/conf.d/default.conf
+# Copy application files
+COPY --from=builder /app/out /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
