@@ -10,6 +10,11 @@ docker compose up
 
 ### developing:
 
+you should start those services
+- nginx - for serving uploads
+- nextjs - for serving frontend
+- aspnet - backend for performing conversion
+
 ngnix:
 ```
 ./dev-nginx.sh
