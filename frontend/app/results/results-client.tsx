@@ -25,7 +25,6 @@ export function ResultsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get hash from URL on client-side only
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -34,7 +33,6 @@ export function ResultsClient() {
     }
   }, []);
 
-  // Fetch files when hash is available
   useEffect(() => {
     if (!hash) {
       setLoading(false);
@@ -105,7 +103,6 @@ export function ResultsClient() {
     );
   };
 
-  // Show loading state while determining hash
   if (loading && hash === null) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -114,7 +111,6 @@ export function ResultsClient() {
     );
   }
 
-  // Show error if no hash found
   if (!hash) {
     return (
       <div className="flex justify-center items-center min-h-screen">

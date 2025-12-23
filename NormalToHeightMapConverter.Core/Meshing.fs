@@ -13,98 +13,106 @@ module Meshing =
                 let h = heights.[x, z]
                 if h < 0.5 then 0 else ceil h |> int)
 
-        // Generate top quads using greedy meshing
-        let visited = Array2D.create w d false
-        let mutable topQuads = []
-
-        for z = 0 to d - 1 do
-            for x = 0 to w - 1 do
-                if not visited.[x, z] then
-                    let h = hmap.[x, z]
-
-                    if h > 0 then
-                        // Grow in +X direction
-                        let mutable x2 = x + 1
-
-                        while x2 < w && not visited.[x2, z] && hmap.[x2, z] = h do
-                            x2 <- x2 + 1
-
-                        // Grow in +Z direction
-                        let mutable z2 = z + 1
-                        let mutable validZ = true
-
-                        while z2 < d && validZ do
-                            for xx = x to x2 - 1 do
-                                if visited.[xx, z2] || hmap.[xx, z2] <> h then
-                                    validZ <- false
-
-                            if validZ then
-                                z2 <- z2 + 1
-
-                        // Mark visited
-                        for zz = z to z2 - 1 do
-                            for xx = x to x2 - 1 do
-                                visited.[xx, zz] <- true
-
-                        topQuads <- (x, z, x2, z2, h) :: topQuads
-
-        // Generate side faces
-        let mutable sideFaces = [] // List of tuples (v0, v1, v2, v3)
-
-        for z = 0 to d - 1 do
-            for x = 0 to w - 1 do
+        // Generate top quads using greedy meshing with immutable set tracking
+        let rec processGrid z x visitedSet quads =
+            if z >= d then
+                (visitedSet, quads)
+            elif x >= w then
+                processGrid (z + 1) 0 visitedSet quads
+            else
                 let h = hmap.[x, z]
 
-                if h > 0 then
-                    // East face (+X direction)
-                    let hEast = if x + 1 < w then hmap.[x + 1, z] else 0
+                if h <= 0 || Set.contains (x, z) visitedSet then
+                    processGrid z (x + 1) visitedSet quads
+                else
+                    // Grow in +X direction
+                    let rec findX curX =
+                        if curX < w && hmap.[curX, z] = h && not (Set.contains (curX, z) visitedSet) then
+                            findX (curX + 1)
+                        else
+                            curX
 
-                    if h > hEast then
-                        let yBot = float hEast
-                        let yTop = float h
-                        let v0 = (float (x + 1), yBot, float z)
-                        let v1 = (float (x + 1), yBot, float (z + 1))
-                        let v2 = (float (x + 1), yTop, float (z + 1))
-                        let v3 = (float (x + 1), yTop, float z)
-                        sideFaces <- (v0, v3, v2, v1) :: sideFaces // CCW order for +X normal
+                    let x2 = findX (x + 1)
 
-                    // West face (-X direction)
-                    let hWest = if x - 1 >= 0 then hmap.[x - 1, z] else 0
+                    // Grow in +Z direction
+                    let rec findZ curZ =
+                        if curZ < d then
+                            let rowValid =
+                                [ x .. x2 - 1 ]
+                                |> List.forall (fun xx ->
+                                    hmap.[xx, curZ] = h && not (Set.contains (xx, curZ) visitedSet))
 
-                    if h > hWest then
-                        let yBot = float hWest
-                        let yTop = float h
-                        let v0 = (float x, yBot, float z)
-                        let v1 = (float x, yBot, float (z + 1))
-                        let v2 = (float x, yTop, float (z + 1))
-                        let v3 = (float x, yTop, float z)
-                        sideFaces <- (v0, v1, v2, v3) :: sideFaces // CCW order for -X normal
+                            if rowValid then findZ (curZ + 1) else curZ
+                        else
+                            curZ
 
-                    // North face (+Z direction)
-                    let hNorth = if z + 1 < d then hmap.[x, z + 1] else 0
+                    let z2 = findZ (z + 1)
 
-                    if h > hNorth then
-                        let yBot = float hNorth
-                        let yTop = float h
-                        let v0 = (float x, yBot, float (z + 1))
-                        let v1 = (float (x + 1), yBot, float (z + 1))
-                        let v2 = (float (x + 1), yTop, float (z + 1))
-                        let v3 = (float x, yTop, float (z + 1))
-                        sideFaces <- (v0, v1, v2, v3) :: sideFaces // CCW order for +Z normal
+                    // Create visited set for this rectangle
+                    let rectPoints =
+                        [ for zz in z .. z2 - 1 do
+                              for xx in x .. x2 - 1 -> (xx, zz) ]
+                        |> Set.ofList
 
-                    // South face (-Z direction)
-                    let hSouth = if z - 1 >= 0 then hmap.[x, z - 1] else 0
+                    let newVisited = Set.union visitedSet rectPoints
+                    let newQuads = (x, z, x2, z2, h) :: quads
+                    processGrid z x2 newVisited newQuads
 
-                    if h > hSouth then
-                        let yBot = float hSouth
-                        let yTop = float h
-                        let v0 = (float x, yBot, float z)
-                        let v1 = (float (x + 1), yBot, float z)
-                        let v2 = (float (x + 1), yTop, float z)
-                        let v3 = (float x, yTop, float z)
-                        sideFaces <- (v0, v3, v2, v1) :: sideFaces // CCW order for -Z normal
+        let (_, topQuads) = processGrid 0 0 Set.empty []
+        let topQuads = List.rev topQuads
 
-        (List.rev topQuads, List.rev sideFaces)
+        // Generate side faces using list comprehensions
+        let sideFaces =
+            [ for z in 0 .. d - 1 do
+                  for x in 0 .. w - 1 do
+                      let h = hmap.[x, z]
+
+                      if h > 0 then
+                          // East face (+X)
+                          let hEast = if x + 1 < w then hmap.[x + 1, z] else 0
+
+                          if h > hEast then
+                              let yBot, yTop = float hEast, float h
+                              let v0 = (float (x + 1), yBot, float z)
+                              let v1 = (float (x + 1), yBot, float (z + 1))
+                              let v2 = (float (x + 1), yTop, float (z + 1))
+                              let v3 = (float (x + 1), yTop, float z)
+                              yield (v0, v3, v2, v1)
+
+                          // West face (-X)
+                          let hWest = if x - 1 >= 0 then hmap.[x - 1, z] else 0
+
+                          if h > hWest then
+                              let yBot, yTop = float hWest, float h
+                              let v0 = (float x, yBot, float z)
+                              let v1 = (float x, yBot, float (z + 1))
+                              let v2 = (float x, yTop, float (z + 1))
+                              let v3 = (float x, yTop, float z)
+                              yield (v0, v1, v2, v3)
+
+                          // North face (+Z)
+                          let hNorth = if z + 1 < d then hmap.[x, z + 1] else 0
+
+                          if h > hNorth then
+                              let yBot, yTop = float hNorth, float h
+                              let v0 = (float x, yBot, float (z + 1))
+                              let v1 = (float (x + 1), yBot, float (z + 1))
+                              let v2 = (float (x + 1), yTop, float (z + 1))
+                              let v3 = (float x, yTop, float (z + 1))
+                              yield (v0, v1, v2, v3)
+
+                          // South face (-Z)
+                          let hSouth = if z - 1 >= 0 then hmap.[x, z - 1] else 0
+
+                          if h > hSouth then
+                              let yBot, yTop = float hSouth, float h
+                              let v0 = (float x, yBot, float z)
+                              let v1 = (float (x + 1), yBot, float z)
+                              let v2 = (float (x + 1), yTop, float z)
+                              let v3 = (float x, yTop, float z)
+                              yield (v0, v3, v2, v1) ]
+
+        (topQuads, sideFaces)
 
     let fst3 (a, _, _) = a
     let snd3 (_, b, _) = b
@@ -115,42 +123,46 @@ module Meshing =
         writer.WriteLine("# Generated by F# Greedy Mesher with side faces")
         writer.WriteLine()
 
-        let mutable vertexIndex = 1
+        // Precompute all vertices
+        let topVertices =
+            topQuads
+            |> List.collect (fun (x, z, x2, z2, h) ->
+                let y = float h
+                let v0 = (float x, y, float z)
+                let v1 = (float x2, y, float z)
+                let v2 = (float x2, y, float z2)
+                let v3 = (float x, y, float z2)
+                [ v0; v1; v2; v3 ])
 
-        // Write top faces
-        for (x, z, x2, z2, h) in topQuads do
-            let v0 = (float x, float h, float z)
-            let v1 = (float x2, float h, float z)
-            let v2 = (float x2, float h, float z2)
-            let v3 = (float x, float h, float z2)
+        let sideVertices =
+            sideFaces |> List.collect (fun (v0, v1, v2, v3) -> [ v0; v1; v2; v3 ])
 
-            writer.WriteLine $"v {fst3 v0} {snd3 v0} {thd3 v0}"
-            writer.WriteLine $"v {fst3 v1} {snd3 v1} {thd3 v1}"
-            writer.WriteLine $"v {fst3 v2} {snd3 v2} {thd3 v2}"
-            writer.WriteLine $"v {fst3 v3} {snd3 v3} {thd3 v3}"
+        let allVertices = topVertices @ sideVertices
 
-            let i = vertexIndex
-            writer.WriteLine($"f {i} {i + 1} {i + 2}")
-            writer.WriteLine($"f {i} {i + 2} {i + 3}")
-            vertexIndex <- vertexIndex + 4
+        // Write vertices
+        for v in allVertices do
+            writer.WriteLine $"v {fst3 v} {snd3 v} {thd3 v}"
 
-        // Write side faces
-        for (v0, v1, v2, v3) in sideFaces do
-            writer.WriteLine $"v {fst3 v0} {snd3 v0} {thd3 v0}"
-            writer.WriteLine $"v {fst3 v1} {snd3 v1} {thd3 v1}"
-            writer.WriteLine $"v {fst3 v2} {snd3 v2} {thd3 v2}"
-            writer.WriteLine $"v {fst3 v3} {snd3 v3} {thd3 v3}"
+        // Write top quad faces
+        let writeQuadFaces baseIndex =
+            writer.WriteLine $"f {baseIndex} {baseIndex + 1} {baseIndex + 2}"
+            writer.WriteLine $"f {baseIndex} {baseIndex + 2} {baseIndex + 3}"
 
-            let i = vertexIndex
-            writer.WriteLine($"f {i} {i + 1} {i + 2}")
-            writer.WriteLine($"f {i} {i + 2} {i + 3}")
-            vertexIndex <- vertexIndex + 4
+        let numTopQuads = List.length topQuads
 
-        let topQuadsLen = Seq.length topQuads
-        let sideFacesLen = Seq.length sideFaces
+        for i in 0 .. numTopQuads - 1 do
+            let baseIndex = i * 4 + 1
+            writeQuadFaces baseIndex
 
+        // Write side face faces
+        let sideBaseIndex = numTopQuads * 4 + 1
+        let numSideFaces = List.length sideFaces
 
-        let totalFaces = topQuadsLen * 2 + sideFacesLen * 2
+        for i in 0 .. numSideFaces - 1 do
+            let baseIndex = sideBaseIndex + i * 4
+            writeQuadFaces baseIndex
+
+        let totalFaces = (numTopQuads + numSideFaces) * 2
 
         printfn
-            $"OBJ written to {filename} with {topQuadsLen} top quads and {sideFacesLen} side quads ({totalFaces} total faces)"
+            $"OBJ written to {filename} with {numTopQuads} top quads and {numSideFaces} side quads ({totalFaces} total faces)"

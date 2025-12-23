@@ -80,7 +80,6 @@ module FileHelpers =
 type UploadController(settings: AppSettings, heightMapService: IHeightMapService) =
     inherit ControllerBase()
 
-    // Static semaphore dictionary for hash-based locking
     static let hashSemaphores = ConcurrentDictionary<string, SemaphoreSlim>()
 
     let getUploadPath () = settings.UploadPath
@@ -89,12 +88,12 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
     member this.UploadNormalMap() : Task<IActionResult> =
         task {
             if not this.Request.HasFormContentType then
-                return this.BadRequest("Missing form data") :> IActionResult
+                return this.BadRequest "Missing form data"
             else
                 let! form = this.Request.ReadFormAsync()
 
                 match Seq.tryHead form.Files with
-                | None -> return this.BadRequest("No file uploaded") :> IActionResult
+                | None -> return this.BadRequest "No file uploaded" :> IActionResult
                 | Some f ->
                     let contentType = f.ContentType.ToLowerInvariant()
 
@@ -119,14 +118,14 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             use tempStream = new FileStream(tempFile, FileMode.Create)
                             do! f.CopyToAsync(tempStream)
 
-                            use stream = File.OpenRead(tempFile)
+                            use stream = File.OpenRead tempFile
                             fileHash <- FileHelpers.computeSha256 stream
 
                             let uploadPath = getUploadPath ()
                             let hashDir = Path.Combine(uploadPath, fileHash)
 
                             let semaphore =
-                                match hashSemaphores.TryGetValue(fileHash) with
+                                match hashSemaphores.TryGetValue fileHash with
                                 | true, s -> s
                                 | false, _ ->
                                     let newSem = new SemaphoreSlim(1, 1)
@@ -141,10 +140,10 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             try
                                 do! semaphore.WaitAsync() |> Async.AwaitTask
 
-                                if Directory.Exists(hashDir) then
-                                    result <- Some(this.Ok({| hash = fileHash |}) :> IActionResult)
+                                if Directory.Exists hashDir then
+                                    result <- Some(this.Ok {| hash = fileHash |} :> IActionResult)
                                 else
-                                    Directory.CreateDirectory(hashDir) |> ignore
+                                    Directory.CreateDirectory hashDir |> ignore
 
                                     let safeName = FileHelpers.sanitizeFileName f.FileName
                                     let ext = Path.GetExtension(safeName)
@@ -176,12 +175,12 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                                               Combine = settings.HeightMap.Combine }
 
                                         heightMapService.GenerateFromPath(normalMapPath, hashDir, generationSettings)
-                                        result <- Some(this.Ok({| hash = fileHash |}) :> IActionResult)
+                                        result <- Some(this.Ok {| hash = fileHash |} :> IActionResult)
                             finally
                                 semaphore.Release() |> ignore
                         finally
-                            if File.Exists(tempFile) then
-                                File.Delete(tempFile)
+                            if File.Exists tempFile then
+                                File.Delete tempFile
 
                         match result with
                         | Some r -> return r
@@ -195,12 +194,12 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
             let hashRegex = "^[a-f0-9]{64}$"
 
             if normalizedHash.Length <> 64 || not (Regex.IsMatch(normalizedHash, hashRegex)) then
-                return this.BadRequest("Invalid hash format") :> IActionResult
+                return this.BadRequest "Invalid hash format" :> IActionResult
             else
                 let dirPath = Path.Combine(getUploadPath (), normalizedHash)
 
                 if not (Directory.Exists(dirPath)) then
-                    return this.NotFound({| error = $"Directory with hash {hash} not found" |}) :> IActionResult
+                    return this.NotFound {| error = $"Directory with hash {hash} not found" |} :> IActionResult
                 else
                     let files =
                         Directory.GetFiles(dirPath)
@@ -209,13 +208,13 @@ type UploadController(settings: AppSettings, heightMapService: IHeightMapService
                             let fileName = fileInfo.Name
                             let fileType = FileHelpers.getFileType fileName
 
-                            let baseUrl = $"/uploads/{Uri.EscapeDataString(normalizedHash)}"
+                            let baseUrl = $"/uploads/{Uri.EscapeDataString normalizedHash}"
 
-                            let fileUrl = $"{baseUrl}/{Uri.EscapeDataString(fileName)}"
+                            let fileUrl = $"{baseUrl}/{Uri.EscapeDataString fileName}"
 
                             {| filename = fileName
                                size = fileInfo.Length
-                               last_modified = fileInfo.LastWriteTimeUtc.ToString("o")
+                               last_modified = fileInfo.LastWriteTimeUtc.ToString "o"
                                ``type`` = fileType
                                url = fileUrl |})
 
